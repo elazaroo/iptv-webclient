@@ -2,6 +2,52 @@
 
 Un reproductor web moderno para listas IPTV M3U con interfaz Bootstrap y base de datos SQLite.
 
+## 🚀 Instalación Rápida
+
+### Desde GitHub Container Registry (Recomendado)
+
+```bash
+# Método 1: Docker run directo
+docker run -d \
+  --name iptv-webclient \
+  -p 3010:80 \
+  -v iptv_data:/app/data \
+  ghcr.io/elazaroo/iptv-webclient:latest
+
+# Método 2: Con docker-compose
+wget https://raw.githubusercontent.com/elazaroo/iptv-webclient/main/docker-compose.ghcr.yml
+docker-compose -f docker-compose.ghcr.yml up -d
+```
+
+**Acceso:** http://localhost:3010
+
+### Para CasaOS (Interfaz Web)
+
+**Configuración en CasaOS:**
+- **Imagen Docker:** `ghcr.io/elazaroo/iptv-webclient:latest`
+- **Tag:** `latest`
+- **Título:** `IPTV WebClient`
+- **Icono URL:** `https://cdn-icons-png.flaticon.com/512/3039/3039011.png`
+- **Web UI:** `http://192.168.1.10:3010`
+- **Puertos:** `3010` → `80` (TCP)
+- **Volúmenes:** `/app/data` → `iptv_data` (Named Volume)
+- **Variables de entorno:**
+  - `FLASK_ENV` → `production`
+  - `FLASK_APP` → `app/main.py`
+- **Red:** `bridge`
+- **Política de reinicio:** `unless-stopped`
+
+## 🛠️ Desarrollo Local
+
+```bash
+# Clonar repositorio
+git clone https://github.com/elazaroo/iptv-webclient.git
+cd iptv-webclient
+
+# Ejecutar con Docker Compose
+docker-compose up -d
+```
+
 ## Características
 
 - 📺 Reproductor de video moderno con Video.js
@@ -13,57 +59,6 @@ Un reproductor web moderno para listas IPTV M3U con interfaz Bootstrap y base de
 - 🐳 Contenedor Docker listo para producción
 - 🎮 Controles de teclado y pantalla completa
 - 🔄 Actualización automática de listas desde URL
-
-## Instalación Rápida con Docker
-
-### Usando Docker Compose (Recomendado)
-
-```bash
-# Clonar o descargar los archivos
-git clone <repository-url>
-cd iptv-webclient
-
-# Ejecutar con Docker Compose
-docker-compose up -d
-
-# Ver logs
-docker-compose logs -f
-```
-
-La aplicación estará disponible en: http://localhost:3010
-
-### Usando Docker directamente
-
-```bash
-# Construir imagen
-docker build -t iptv-webclient .
-
-# Ejecutar contenedor
-docker run -d \
-  --name iptv-webclient \
-  -p 3010:80 \
-  -v iptv_data:/app/data \
-  iptv-webclient
-```
-
-## Instalación Manual
-
-### Requisitos
-
-- Python 3.11+
-- pip
-
-### Pasos
-
-```bash
-# Instalar dependencias
-pip install -r requirements.txt
-
-# Ejecutar aplicación
-python app/main.py
-```
-
-La aplicación estará disponible en: http://localhost:3010
 
 ## Uso
 
@@ -109,127 +104,57 @@ La aplicación estará disponible en: http://localhost:3010
 
 ### Backend
 - **Flask**: Framework web Python
-- **SQLite**: Base de datos ligera y eficiente
-- **M3U Parser**: Analizador personalizado de listas M3U
-- **API REST**: Endpoints para gestión de datos
-
-### Containerización
-- **Docker**: Contenedor optimizado
+- **SQLite**: Base de datos embebida
 - **Gunicorn**: Servidor WSGI para producción
-- **Multi-stage build**: Imagen optimizada
-- **Volume persistence**: Datos persistentes
+- **Docker**: Contenedorización multiplataforma
 
-## API Endpoints
+## Actualizaciones
 
-### Listas
-- `GET /api/playlists` - Obtener todas las listas
-- `POST /api/playlists` - Agregar nueva lista
-- `DELETE /api/playlists/<id>` - Eliminar lista
-
-### Canales
-- `GET /api/playlists/<id>/channels` - Obtener canales de una lista
-- `GET /api/playlists/<id>/groups` - Obtener grupos de una lista
-- `GET /api/channels/<id>` - Obtener información de un canal
-
-### Favoritos
-- `GET /api/favorites` - Obtener favoritos
-- `POST /api/favorites/<channel_id>` - Agregar a favoritos
-- `DELETE /api/favorites/<channel_id>` - Quitar de favoritos
-
-### Utilidades
-- `POST /api/validate-m3u` - Validar contenido M3U
-
-## Configuración Avanzada
-
-### Variables de Entorno
-
+### Desde GitHub Container Registry
 ```bash
-FLASK_ENV=production          # Entorno de Flask
-FLASK_APP=app/main.py        # Archivo principal
+# Descargar nueva versión
+docker pull ghcr.io/elazaroo/iptv-webclient:latest
+
+# Recrear contenedor
+docker-compose -f docker-compose.ghcr.yml down
+docker-compose -f docker-compose.ghcr.yml up -d
 ```
 
-### Volúmenes Docker
-
-- `/app/data` - Base de datos y archivos persistentes
-
-### Puertos
-
-- `3010` - Puerto web principal (externo)
-- `80` - Puerto interno del contenedor
-
-## Controles de Teclado
-
-- **Espacio**: Reproducir/Pausar
-- **F**: Pantalla completa
-- **M**: Silenciar/Activar audio
-- **I**: Mostrar información del canal
-- **Esc**: Salir de pantalla completa
-
-## Desarrollo
-
-### Estructura del Proyecto
-
-```
-iptv-webclient/
-├── app/
-│   ├── main.py              # Aplicación principal Flask
-│   ├── database.py          # Gestión de base de datos SQLite
-│   ├── m3u_parser.py        # Parser de archivos M3U
-│   ├── templates/           # Plantillas HTML
-│   │   ├── base.html        # Plantilla base
-│   │   ├── index.html       # Página principal
-│   │   ├── playlist.html    # Vista de lista de canales
-│   │   └── player.html      # Reproductor completo
-│   └── static/              # Archivos estáticos
-├── Dockerfile               # Configuración Docker
-├── docker-compose.yml       # Orquestación Docker
-├── requirements.txt         # Dependencias Python
-└── README.md               # Este archivo
-```
-
-### Contribuir
-
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/amazing-feature`)
-3. Commit tus cambios (`git commit -m 'Add amazing feature'`)
-4. Push a la rama (`git push origin feature/amazing-feature`)
-5. Abre un Pull Request
-
-## Troubleshooting
-
-### Problemas Comunes
-
-1. **Canal no reproduce**
-   - Verifica que la URL del stream sea válida
-   - Algunos streams requieren headers específicos
-   - Comprueba la conectividad de red
-
-2. **Lista M3U no se carga**
-   - Verifica el formato del archivo M3U
-   - Asegúrate de que la URL sea accesible
-   - Revisa los logs para errores específicos
-
-3. **Base de datos corrupta**
-   - Elimina el volumen Docker: `docker volume rm iptv_data`
-   - Reinicia el contenedor
-
-### Logs
-
+### Desde código fuente
 ```bash
-# Ver logs del contenedor
-docker-compose logs -f iptv-webclient
+# Actualizar código
+git pull origin main
 
-# Ver logs en tiempo real
-docker logs -f iptv-webclient
+# Reconstruir
+docker-compose down
+docker-compose up -d --build
 ```
+
+## Solución de Problemas
+
+### Logs del contenedor
+```bash
+docker logs iptv-webclient
+```
+
+### Verificar estado
+```bash
+docker ps | grep iptv-webclient
+```
+
+### Reiniciar aplicación
+```bash
+docker restart iptv-webclient
+```
+
+## Contribuir
+
+1. Fork del proyecto
+2. Crear rama para nueva característica
+3. Commit de cambios
+4. Push a la rama
+5. Crear Pull Request
 
 ## Licencia
 
-Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más detalles.
-
-## Soporte
-
-Para soporte y preguntas:
-- Crea un issue en GitHub
-- Revisa la documentación existente
-- Verifica los logs para errores específicos
+Este proyecto está bajo la Licencia MIT.
