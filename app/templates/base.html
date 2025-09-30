@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}IPTV WebClient{% endblock %}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Video.js CSS -->
+    <link href="https://vjs.zencdn.net/8.6.1/video-js.css" rel="stylesheet">
+    
+    <style>
+        .navbar-brand {
+            font-weight: bold;
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transition: all 0.3s ease;
+        }
+        
+        .channel-item {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .channel-item:hover {
+            background-color: #f8f9fa;
+            border-color: #007bff;
+        }
+        
+        .channel-logo {
+            width: 48px;
+            height: 48px;
+            object-fit: contain;
+            border-radius: 8px;
+        }
+        
+        .group-badge {
+            font-size: 0.75rem;
+        }
+        
+        .loading-spinner {
+            display: none;
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .sidebar {
+            height: calc(100vh - 56px);
+            overflow-y: auto;
+            border-right: 1px solid #dee2e6;
+        }
+        
+        .main-content {
+            height: calc(100vh - 56px);
+            overflow-y: auto;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 100%;
+        }
+        
+        .video-js {
+            width: 100% !important;
+            height: auto !important;
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                height: auto;
+                border-right: none;
+                border-bottom: 1px solid #dee2e6;
+            }
+            
+            .main-content {
+                height: auto;
+            }
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="bi bi-tv"></i> IPTV WebClient
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">
+                            <i class="bi bi-house"></i> Inicio
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="showAddPlaylistModal()">
+                            <i class="bi bi-plus-circle"></i> Agregar Lista
+                        </a>
+                    </li>
+                </ul>
+                
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" onclick="loadFavorites()">
+                            <i class="bi bi-heart"></i> Favoritos
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Contenido principal -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Modal para agregar lista -->
+    <div class="modal fade" id="addPlaylistModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Agregar Lista IPTV</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addPlaylistForm">
+                        <div class="mb-3">
+                            <label for="playlistName" class="form-label">Nombre de la lista</label>
+                            <input type="text" class="form-control" id="playlistName" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Método de importación</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="importMethod" id="urlMethod" value="url" checked>
+                                <label class="btn btn-outline-primary" for="urlMethod">URL</label>
+                                
+                                <input type="radio" class="btn-check" name="importMethod" id="fileMethod" value="file">
+                                <label class="btn btn-outline-primary" for="fileMethod">Archivo</label>
+                            </div>
+                        </div>
+                        
+                        <div id="urlSection" class="mb-3">
+                            <label for="playlistUrl" class="form-label">URL de la lista M3U</label>
+                            <input type="url" class="form-control" id="playlistUrl" placeholder="https://ejemplo.com/lista.m3u">
+                        </div>
+                        
+                        <div id="fileSection" class="mb-3" style="display: none;">
+                            <label for="playlistFile" class="form-label">Archivo M3U</label>
+                            <input type="file" class="form-control" id="playlistFile" accept=".m3u,.m3u8">
+                        </div>
+                        
+                        <div id="validationResult" class="alert" style="display: none;"></div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="validatePlaylist()">Validar</button>
+                    <button type="button" class="btn btn-success" id="addPlaylistBtn" onclick="addPlaylist()" style="display: none;">Agregar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast para notificaciones -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="notificationToast" class="toast" role="alert">
+            <div class="toast-header">
+                <i class="bi bi-info-circle me-2"></i>
+                <strong class="me-auto">Notificación</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toastMessage"></div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://vjs.zencdn.net/8.6.1/video.min.js"></script>
+    
+    <script>
+        // Función para mostrar notificaciones
+        function showNotification(message, type = 'info') {
+            const toast = document.getElementById('notificationToast');
+            const toastMessage = document.getElementById('toastMessage');
+            const toastHeader = toast.querySelector('.toast-header');
+            
+            // Cambiar icono según el tipo
+            const icon = toastHeader.querySelector('i');
+            icon.className = `bi me-2 ${type === 'success' ? 'bi-check-circle' : type === 'error' ? 'bi-exclamation-triangle' : 'bi-info-circle'}`;
+            
+            // Cambiar color del header
+            toastHeader.className = `toast-header ${type === 'success' ? 'bg-success text-white' : type === 'error' ? 'bg-danger text-white' : 'bg-primary text-white'}`;
+            
+            toastMessage.textContent = message;
+            
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+        }
+        
+        // Cambiar método de importación
+        document.querySelectorAll('input[name="importMethod"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const urlSection = document.getElementById('urlSection');
+                const fileSection = document.getElementById('fileSection');
+                
+                if (this.value === 'url') {
+                    urlSection.style.display = 'block';
+                    fileSection.style.display = 'none';
+                } else {
+                    urlSection.style.display = 'none';
+                    fileSection.style.display = 'block';
+                }
+                
+                // Limpiar resultado de validación
+                document.getElementById('validationResult').style.display = 'none';
+                document.getElementById('addPlaylistBtn').style.display = 'none';
+            });
+        });
+        
+        // Mostrar modal para agregar lista
+        function showAddPlaylistModal() {
+            const modal = new bootstrap.Modal(document.getElementById('addPlaylistModal'));
+            modal.show();
+        }
+        
+        // Validar lista M3U
+        async function validatePlaylist() {
+            const name = document.getElementById('playlistName').value.trim();
+            const method = document.querySelector('input[name="importMethod"]:checked').value;
+            const resultDiv = document.getElementById('validationResult');
+            const addBtn = document.getElementById('addPlaylistBtn');
+            
+            if (!name) {
+                showNotification('Por favor ingresa un nombre para la lista', 'error');
+                return;
+            }
+            
+            let data = { name };
+            
+            if (method === 'url') {
+                const url = document.getElementById('playlistUrl').value.trim();
+                if (!url) {
+                    showNotification('Por favor ingresa una URL', 'error');
+                    return;
+                }
+                data.url = url;
+            } else {
+                const fileInput = document.getElementById('playlistFile');
+                if (!fileInput.files[0]) {
+                    showNotification('Por favor selecciona un archivo', 'error');
+                    return;
+                }
+                
+                const file = fileInput.files[0];
+                const content = await file.text();
+                data.content = content;
+            }
+            
+            try {
+                const response = await fetch('/api/validate-m3u', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.valid) {
+                    resultDiv.className = 'alert alert-success';
+                    resultDiv.innerHTML = `
+                        <i class="bi bi-check-circle"></i>
+                        <strong>Lista válida!</strong><br>
+                        Canales: ${result.channels_count}<br>
+                        Grupos: ${result.groups_count}
+                    `;
+                    resultDiv.style.display = 'block';
+                    addBtn.style.display = 'inline-block';
+                } else {
+                    resultDiv.className = 'alert alert-danger';
+                    resultDiv.innerHTML = `
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>Error:</strong> ${result.error}
+                    `;
+                    resultDiv.style.display = 'block';
+                    addBtn.style.display = 'none';
+                }
+            } catch (error) {
+                showNotification('Error al validar la lista: ' + error.message, 'error');
+            }
+        }
+        
+        // Agregar lista M3U
+        async function addPlaylist() {
+            const name = document.getElementById('playlistName').value.trim();
+            const method = document.querySelector('input[name="importMethod"]:checked').value;
+            
+            let data = { name };
+            
+            if (method === 'url') {
+                data.url = document.getElementById('playlistUrl').value.trim();
+            } else {
+                const fileInput = document.getElementById('playlistFile');
+                const file = fileInput.files[0];
+                const content = await file.text();
+                data.file_content = content;
+            }
+            
+            try {
+                const response = await fetch('/api/playlists', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showNotification(`Lista agregada con ${result.channels_count} canales`, 'success');
+                    
+                    // Cerrar modal
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('addPlaylistModal'));
+                    modal.hide();
+                    
+                    // Recargar página
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    showNotification('Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showNotification('Error al agregar la lista: ' + error.message, 'error');
+            }
+        }
+        
+        // Cargar favoritos
+        async function loadFavorites() {
+            try {
+                const response = await fetch('/api/favorites');
+                const favorites = await response.json();
+                
+                if (favorites.length === 0) {
+                    showNotification('No tienes canales favoritos', 'info');
+                    return;
+                }
+                
+                // Crear modal dinámico para mostrar favoritos
+                // Esta funcionalidad se puede expandir según necesidades
+                showNotification(`Tienes ${favorites.length} canales favoritos`, 'info');
+            } catch (error) {
+                showNotification('Error al cargar favoritos: ' + error.message, 'error');
+            }
+        }
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

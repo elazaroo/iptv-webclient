@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+
+{% block title %}IPTV WebClient - Inicio{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    {% if playlists %}
+        <div class="row">
+            <div class="col-12">
+                <h2 class="mb-4">
+                    <i class="bi bi-collection-play"></i> Mis Listas IPTV
+                    <small class="text-muted">({{ playlists|length }} listas)</small>
+                </h2>
+            </div>
+        </div>
+        
+        <div class="row g-4">
+            {% for playlist in playlists %}
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 card-hover">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="bi bi-play-circle text-primary"></i>
+                            {{ playlist.name }}
+                        </h5>
+                        
+                        <p class="card-text text-muted">
+                            <small>
+                                <i class="bi bi-calendar3"></i>
+                                Agregada: {{ playlist.created_at[:10] }}
+                            </small>
+                        </p>
+                        
+                        {% if playlist.url %}
+                        <p class="card-text">
+                            <small class="text-info">
+                                <i class="bi bi-link-45deg"></i>
+                                Lista desde URL
+                            </small>
+                        </p>
+                        {% endif %}
+                        
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('view_playlist', playlist_id=playlist.id) }}" 
+                               class="btn btn-primary">
+                                <i class="bi bi-eye"></i> Ver Canales
+                            </a>
+                            
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-outline-info btn-sm" 
+                                        onclick="showPlaylistInfo({{ playlist.id }})">
+                                    <i class="bi bi-info-circle"></i> Info
+                                </button>
+                                
+                                {% if playlist.url %}
+                                <button type="button" class="btn btn-outline-success btn-sm" 
+                                        onclick="refreshPlaylist({{ playlist.id }})">
+                                    <i class="bi bi-arrow-clockwise"></i> Actualizar
+                                </button>
+                                {% endif %}
+                                
+                                <button type="button" class="btn btn-outline-danger btn-sm" 
+                                        onclick="deletePlaylist({{ playlist.id }}, '{{ playlist.name }}')">
+                                    <i class="bi bi-trash"></i> Eliminar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <!-- Estado vacío -->
+        <div class="row justify-content-center">
+            <div class="col-lg-6 text-center">
+                <div class="py-5">
+                    <i class="bi bi-tv display-1 text-muted"></i>
+                    <h3 class="mt-3 mb-4">No tienes listas IPTV</h3>
+                    <p class="text-muted mb-4">
+                        Comienza agregando tu primera lista M3U para disfrutar de tus canales favoritos.
+                    </p>
+                    
+                    <button class="btn btn-primary btn-lg" onclick="showAddPlaylistModal()">
+                        <i class="bi bi-plus-circle"></i> Agregar Primera Lista
+                    </button>
+                    
+                    <div class="mt-4">
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle"></i>
+                            Formatos soportados: M3U, M3U8
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Instrucciones -->
+        <div class="row mt-5">
+            <div class="col-12">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="bi bi-question-circle"></i> ¿Cómo empezar?
+                        </h5>
+                        
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <div class="d-flex align-items-start">
+                                    <div class="badge bg-primary rounded-pill me-3">1</div>
+                                    <div>
+                                        <h6>Obtén una lista M3U</h6>
+                                        <small class="text-muted">
+                                            Consigue un archivo M3U o una URL de tu proveedor IPTV
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-4">
+                                <div class="d-flex align-items-start">
+                                    <div class="badge bg-primary rounded-pill me-3">2</div>
+                                    <div>
+                                        <h6>Agrega la lista</h6>
+                                        <small class="text-muted">
+                                            Haz clic en "Agregar Lista" y proporciona la URL o archivo
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-4">
+                                <div class="d-flex align-items-start">
+                                    <div class="badge bg-primary rounded-pill me-3">3</div>
+                                    <div>
+                                        <h6>Disfruta</h6>
+                                        <small class="text-muted">
+                                            Navega por los canales organizados en categorías
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Modal de información de la lista -->
+<div class="modal fade" id="playlistInfoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Información de la Lista</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="playlistInfoContent">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Mostrar información de la lista
+    async function showPlaylistInfo(playlistId) {
+        const modal = new bootstrap.Modal(document.getElementById('playlistInfoModal'));
+        const content = document.getElementById('playlistInfoContent');
+        
+        modal.show();
+        
+        try {
+            // Obtener información de la lista
+            const [playlistResponse, groupsResponse, channelsResponse] = await Promise.all([
+                fetch(`/api/playlists`),
+                fetch(`/api/playlists/${playlistId}/groups`),
+                fetch(`/api/playlists/${playlistId}/channels`)
+            ]);
+            
+            const playlists = await playlistResponse.json();
+            const groups = await groupsResponse.json();
+            const channels = await channelsResponse.json();
+            
+            const playlist = playlists.find(p => p.id === playlistId);
+            
+            content.innerHTML = `
+                <div class="row g-3">
+                    <div class="col-12">
+                        <h6><i class="bi bi-collection-play"></i> ${playlist.name}</h6>
+                    </div>
+                    
+                    <div class="col-6">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body text-center">
+                                <h4>${channels.length}</h4>
+                                <small>Canales</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-6">
+                        <div class="card bg-success text-white">
+                            <div class="card-body text-center">
+                                <h4>${groups.length}</h4>
+                                <small>Categorías</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-12">
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>Creada:</strong></td>
+                                <td>${new Date(playlist.created_at).toLocaleDateString('es-ES')}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Actualizada:</strong></td>
+                                <td>${new Date(playlist.updated_at).toLocaleDateString('es-ES')}</td>
+                            </tr>
+                            ${playlist.url ? `<tr><td><strong>URL:</strong></td><td class="text-break">${playlist.url}</td></tr>` : ''}
+                        </table>
+                    </div>
+                    
+                    ${groups.length > 0 ? `
+                    <div class="col-12">
+                        <h6>Categorías:</h6>
+                        <div class="d-flex flex-wrap gap-1">
+                            ${groups.map(group => `<span class="badge bg-secondary">${group.name}</span>`).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+            
+        } catch (error) {
+            content.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Error al cargar la información: ${error.message}
+                </div>
+            `;
+        }
+    }
+    
+    // Actualizar lista desde URL
+    async function refreshPlaylist(playlistId) {
+        try {
+            showNotification('Actualizando lista...', 'info');
+            
+            // Primero obtener la información actual
+            const response = await fetch('/api/playlists');
+            const playlists = await response.json();
+            const playlist = playlists.find(p => p.id === playlistId);
+            
+            if (!playlist || !playlist.url) {
+                showNotification('No se puede actualizar esta lista', 'error');
+                return;
+            }
+            
+            // Eliminar lista actual
+            await fetch(`/api/playlists/${playlistId}`, { method: 'DELETE' });
+            
+            // Agregar lista actualizada
+            const addResponse = await fetch('/api/playlists', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: playlist.name,
+                    url: playlist.url
+                })
+            });
+            
+            const result = await addResponse.json();
+            
+            if (result.success) {
+                showNotification('Lista actualizada correctamente', 'success');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showNotification('Error: ' + result.error, 'error');
+            }
+            
+        } catch (error) {
+            showNotification('Error al actualizar: ' + error.message, 'error');
+        }
+    }
+    
+    // Eliminar lista
+    async function deletePlaylist(playlistId, playlistName) {
+        if (!confirm(`¿Estás seguro de que quieres eliminar la lista "${playlistName}"?`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/playlists/${playlistId}`, {
+                method: 'DELETE'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showNotification('Lista eliminada correctamente', 'success');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showNotification('Error: ' + result.error, 'error');
+            }
+            
+        } catch (error) {
+            showNotification('Error al eliminar: ' + error.message, 'error');
+        }
+    }
+</script>
+{% endblock %}

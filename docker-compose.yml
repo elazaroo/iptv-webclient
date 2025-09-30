@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  iptv-webclient:
+    build: .
+    ports:
+      - "3010:80"
+    volumes:
+      # Persistir la base de datos
+      - iptv_data:/app/data
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=app/main.py
+    restart: unless-stopped
+    container_name: iptv-webclient
+    
+    # Configuración de healthcheck
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  iptv_data:
+    driver: local
