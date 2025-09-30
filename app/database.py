@@ -1,5 +1,7 @@
 import sqlite3
 import os
+import sqlite3
+import os
 from datetime import datetime
 
 class Database:
@@ -212,5 +214,35 @@ class Database:
                    ORDER BY f.created_at DESC'''
             )
             return [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+    
+    def toggle_favorite(self, channel_id):
+        """Toggle favorito de un canal. Retorna True si se agregó, False si se eliminó"""
+        conn = self.get_connection()
+        try:
+            # Verificar si ya está en favoritos
+            cursor = conn.execute('SELECT id FROM favorites WHERE channel_id = ?', (channel_id,))
+            existing = cursor.fetchone()
+            
+            if existing:
+                # Eliminar de favoritos
+                conn.execute('DELETE FROM favorites WHERE channel_id = ?', (channel_id,))
+                conn.commit()
+                return False
+            else:
+                # Agregar a favoritos
+                conn.execute('INSERT INTO favorites (channel_id) VALUES (?)', (channel_id,))
+                conn.commit()
+                return True
+        finally:
+            conn.close()
+    
+    def is_favorite(self, channel_id):
+        """Verificar si un canal está en favoritos"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.execute('SELECT id FROM favorites WHERE channel_id = ?', (channel_id,))
+            return cursor.fetchone() is not None
         finally:
             conn.close()

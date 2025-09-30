@@ -143,10 +143,46 @@ def add_playlist():
 @app.route('/api/playlists/<int:playlist_id>/channels')
 def get_channels(playlist_id):
     try:
-        channels = db.get_channels_by_playlist(playlist_id)
+        channels = db.get_channels(playlist_id)
         return jsonify({'channels': channels})
     except Exception as e:
         logger.error(f"Error getting channels: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/playlists/<int:playlist_id>/groups')
+def get_groups(playlist_id):
+    try:
+        groups = db.get_groups(playlist_id)
+        return jsonify({'groups': groups})
+    except Exception as e:
+        logger.error(f"Error getting groups: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/playlists/<int:playlist_id>', methods=['DELETE'])
+def delete_playlist(playlist_id):
+    try:
+        db.delete_playlist(playlist_id)
+        return jsonify({'success': True, 'message': 'Lista eliminada exitosamente'})
+    except Exception as e:
+        logger.error(f"Error deleting playlist: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/playlists/<int:playlist_id>/channels')
+def get_channels(playlist_id):
+    try:
+        channels = db.get_channels(playlist_id)
+        return jsonify({'channels': channels})
+    except Exception as e:
+        logger.error(f"Error getting channels: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/favorites/<int:channel_id>', methods=['DELETE'])
+def remove_favorite(channel_id):
+    try:
+        db.remove_favorite(channel_id)
+        return jsonify({'success': True, 'message': 'Eliminado de favoritos'})
+    except Exception as e:
+        logger.error(f"Error removing favorite: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/playlist/<int:playlist_id>')
@@ -157,8 +193,8 @@ def view_playlist(playlist_id):
             flash('Playlist no encontrada', 'error')
             return redirect(url_for('index'))
         
-        channels = db.get_channels_by_playlist(playlist_id)
-        groups = db.get_groups_by_playlist(playlist_id)
+        channels = db.get_channels(playlist_id)
+        groups = db.get_groups(playlist_id)
         
         return render_template('playlist.html', 
                              playlist=playlist, 
@@ -167,6 +203,25 @@ def view_playlist(playlist_id):
     except Exception as e:
         logger.error(f"Error viewing playlist: {e}")
         flash('Error al cargar la playlist', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/player')
+def player():
+    try:
+        channel_id = request.args.get('channel_id')
+        if not channel_id:
+            flash('ID de canal requerido', 'error')
+            return redirect(url_for('index'))
+        
+        channel = db.get_channel(int(channel_id))
+        if not channel:
+            flash('Canal no encontrado', 'error')
+            return redirect(url_for('index'))
+        
+        return render_template('player.html', channel=channel)
+    except Exception as e:
+        logger.error(f"Error loading player: {e}")
+        flash('Error al cargar el reproductor', 'error')
         return redirect(url_for('index'))
 
 @app.route('/play/<int:channel_id>')
@@ -186,16 +241,41 @@ def play_channel(channel_id):
 @app.route('/api/favorites/<int:channel_id>', methods=['POST'])
 def toggle_favorite(channel_id):
     try:
-        db.toggle_favorite(channel_id)
-        return jsonify({'message': 'Favorito actualizado'})
+        # Aquí asumimos que toggle_favorite devuelve True si se agregó, False si se eliminó
+        is_favorite = db.toggle_favorite(channel_id) if hasattr(db, 'toggle_favorite') else None
+        
+        if is_favorite is None:
+            # Si no hay método toggle, intentamos con add/remove
+            try:
+                db.add_favorite(channel_id)
+                message = 'Agregado a favoritos'
+            except:
+                try:
+                    db.remove_favorite(channel_id)
+                    message = 'Eliminado de favoritos'
+                except:
+                    message = 'Favorito actualizado'
+        else:
+            message = 'Agregado a favoritos' if is_favorite else 'Eliminado de favoritos'
+            
+        return jsonify({'success': True, 'message': message})
     except Exception as e:
         logger.error(f"Error toggling favorite: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/favorites')
+def get_favorites():
+    try:
+        favorites = db.get_favorites()
+        return jsonify({'favorites': favorites})
+    except Exception as e:
+        logger.error(f"Error getting favorites: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/favorites')
 def favorites():
     try:
-        channels = db.get_favorite_channels()
+        channels = db.get_favorites()
         return render_template('favorites.html', channels=channels)
     except Exception as e:
         logger.error(f"Error getting favorites: {e}")

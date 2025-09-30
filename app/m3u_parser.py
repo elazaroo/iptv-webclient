@@ -1,5 +1,7 @@
 import re
 import requests
+import re
+import requests
 from urllib.parse import urlparse
 
 class M3UParser:
