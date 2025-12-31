@@ -112,22 +112,26 @@ def add_playlist():
                 group_id = db.add_group(playlist_id, group_name)
                 group_map[group_name] = group_id
         
-        # Agregar canales
+        # Agregar canales en batch para evitar "database is locked"
+        channels_data = []
         for channel in parsed_data['channels']:
             group_id = None
             if channel.get('group_title') and channel['group_title'] in group_map:
                 group_id = group_map[channel['group_title']]
             
-            db.add_channel(
-                playlist_id=playlist_id,
-                name=channel['name'],
-                url=channel['url'],
-                group_id=group_id,
-                logo=channel.get('logo', ''),
-                tvg_id=channel.get('tvg_id', ''),
-                tvg_name=channel.get('tvg_name', ''),
-                group_title=channel.get('group_title', '')
-            )
+            channels_data.append((
+                playlist_id,
+                group_id,
+                channel['name'],
+                channel['url'],
+                channel.get('logo', ''),
+                channel.get('tvg_id', ''),
+                channel.get('tvg_name', ''),
+                channel.get('group_title', '')
+            ))
+        
+        # Insertar todos los canales en una sola transacción
+        db.add_channels_batch(channels_data)
         
         return jsonify({
             'success': True,
@@ -165,15 +169,6 @@ def delete_playlist(playlist_id):
         return jsonify({'success': True, 'message': 'Lista eliminada exitosamente'})
     except Exception as e:
         logger.error(f"Error deleting playlist: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/playlists/<int:playlist_id>/channels')
-def get_channels(playlist_id):
-    try:
-        channels = db.get_channels(playlist_id)
-        return jsonify({'channels': channels})
-    except Exception as e:
-        logger.error(f"Error getting channels: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/favorites/<int:channel_id>', methods=['DELETE'])

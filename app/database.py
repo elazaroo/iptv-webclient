@@ -1,7 +1,5 @@
 import sqlite3
 import os
-import sqlite3
-import os
 from datetime import datetime
 
 class Database:
@@ -12,8 +10,12 @@ class Database:
         self.init_db()
     
     def get_connection(self):
-        conn = sqlite3.connect(self.db_path)
+        # Timeout de 30 segundos para evitar "database is locked"
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
+        # Habilitar WAL mode para mejor concurrencia
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=30000')
         return conn
     
     def init_db(self):
@@ -145,6 +147,20 @@ class Database:
             channel_id = cursor.lastrowid
             conn.commit()
             return channel_id
+        finally:
+            conn.close()
+    
+    def add_channels_batch(self, channels_data):
+        """Agregar múltiples canales en una sola transacción"""
+        conn = self.get_connection()
+        try:
+            conn.executemany(
+                '''INSERT INTO channels 
+                   (playlist_id, group_id, name, url, logo, tvg_id, tvg_name, group_title) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                channels_data
+            )
+            conn.commit()
         finally:
             conn.close()
     

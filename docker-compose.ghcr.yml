@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   iptv-webclient:
     image: ghcr.io/elazaroo/iptv-webclient:latest
@@ -12,9 +10,9 @@ services:
       - FLASK_APP=app/main.py
     restart: unless-stopped
     container_name: iptv-webclient
-    
+
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      test: [ "CMD", "curl", "-f", "http://localhost:80" ]
       interval: 30s
       timeout: 10s
       retries: 3
