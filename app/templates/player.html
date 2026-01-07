@@ -8,13 +8,13 @@
         background-color: #000;
         color: #fff;
     }
-    
+
     .player-container {
         height: 100vh;
         display: flex;
         flex-direction: column;
     }
-    
+
     .video-container {
         flex: 1;
         display: flex;
@@ -22,13 +22,13 @@
         justify-content: center;
         background-color: #000;
     }
-    
+
     .video-js {
         width: 100% !important;
         height: 100% !important;
         max-height: calc(100vh - 120px);
     }
-    
+
     .controls-overlay {
         position: absolute;
         top: 20px;
@@ -41,35 +41,35 @@
         opacity: 1;
         transition: opacity 0.3s ease;
     }
-    
+
     .controls-overlay.hidden {
         opacity: 0;
         pointer-events: none;
     }
-    
+
     .channel-info {
         background: rgba(0, 0, 0, 0.8);
         border-radius: 10px;
         padding: 15px;
         margin-bottom: 20px;
     }
-    
+
     .navbar-dark {
         background-color: rgba(0, 0, 0, 0.9) !important;
     }
-    
+
     .btn-glass {
         background: rgba(255, 255, 255, 0.1);
         border: 1px solid rgba(255, 255, 255, 0.2);
         color: white;
         backdrop-filter: blur(10px);
     }
-    
+
     .btn-glass:hover {
         background: rgba(255, 255, 255, 0.2);
         color: white;
     }
-    
+
     .status-indicator {
         display: inline-block;
         width: 8px;
@@ -77,33 +77,41 @@
         border-radius: 50%;
         margin-right: 8px;
     }
-    
+
     .status-indicator.connecting {
         background-color: #ffc107;
         animation: pulse 1.5s infinite;
     }
-    
+
     .status-indicator.connected {
         background-color: #28a745;
     }
-    
+
     .status-indicator.error {
         background-color: #dc3545;
     }
-    
+
     @keyframes pulse {
-        0% { opacity: 1; }
-        50% { opacity: 0.5; }
-        100% { opacity: 1; }
+        0% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.5;
+        }
+
+        100% {
+            opacity: 1;
+        }
     }
-    
+
     .fullscreen-btn {
         position: absolute;
         bottom: 20px;
         right: 20px;
         z-index: 1001;
     }
-    
+
     @media (max-width: 768px) {
         .controls-overlay {
             top: 10px;
@@ -111,7 +119,7 @@
             right: 10px;
             padding: 10px;
         }
-        
+
         .fullscreen-btn {
             bottom: 10px;
             right: 10px;
@@ -130,7 +138,7 @@
                     <i class="bi bi-arrow-left"></i> Volver
                 </button>
             </div>
-            
+
             <div class="col">
                 <div class="d-flex align-items-center">
                     <span class="status-indicator connecting" id="statusIndicator"></span>
@@ -138,17 +146,17 @@
                     <span class="badge bg-secondary">{{ channel.group_title or 'Sin categoría' }}</span>
                 </div>
             </div>
-            
+
             <div class="col-auto">
                 <div class="btn-group btn-group-sm" role="group">
                     <button class="btn btn-glass" onclick="toggleFavorite({{ channel.id }}, this)" id="favoriteBtn">
                         <i class="bi bi-heart"></i>
                     </button>
-                    
+
                     <button class="btn btn-glass" onclick="shareChannel()">
                         <i class="bi bi-share"></i>
                     </button>
-                    
+
                     <button class="btn btn-glass" onclick="toggleControls()">
                         <i class="bi bi-gear"></i>
                     </button>
@@ -156,14 +164,11 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Contenedor del video -->
     <div class="video-container" onclick="toggleControlsVisibility()">
-        <video id="mainPlayer" 
-               class="video-js vjs-default-skin" 
-               controls 
-               preload="none"
-               data-setup='{"fluid": true, "responsive": true}'>
+        <video id="mainPlayer" class="video-js vjs-default-skin" controls preload="none"
+            data-setup='{"fluid": true, "responsive": true}'>
             <p class="vjs-no-js">
                 Para ver este video, habilita JavaScript y considera actualizar a un
                 <a href="https://videojs.com/html5-video-support/" target="_blank">
@@ -172,7 +177,7 @@
             </p>
         </video>
     </div>
-    
+
     <!-- Botón de pantalla completa flotante -->
     <button class="btn btn-glass fullscreen-btn" onclick="toggleFullscreen()" id="fullscreenBtn">
         <i class="bi bi-arrows-fullscreen"></i>
@@ -192,10 +197,11 @@
                     <div class="col-12">
                         {% if channel.logo %}
                         <div class="text-center mb-3">
-                            <img src="{{ channel.logo }}" class="img-fluid rounded" style="max-height: 100px;" alt="{{ channel.name }}">
+                            <img src="{{ channel.logo }}" class="img-fluid rounded" style="max-height: 100px;"
+                                alt="{{ channel.name }}">
                         </div>
                         {% endif %}
-                        
+
                         <table class="table table-dark">
                             <tr>
                                 <td><strong>Nombre:</strong></td>
@@ -251,7 +257,7 @@
                             <option value="480p">480p</option>
                         </select>
                     </div>
-                    
+
                     <div class="col-12">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="autoplayCheck">
@@ -260,7 +266,7 @@
                             </label>
                         </div>
                     </div>
-                    
+
                     <div class="col-12">
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="loopCheck">
@@ -269,7 +275,7 @@
                             </label>
                         </div>
                     </div>
-                    
+
                     <div class="col-12">
                         <label class="form-label">Volumen</label>
                         <input type="range" class="form-range" min="0" max="100" value="50" id="volumeSlider">
@@ -291,84 +297,89 @@
     let player = null;
     let controlsVisible = true;
     let hideControlsTimeout = null;
-    
+
     // Inicializar reproductor cuando la página cargue
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         initializePlayer();
         setupEventListeners();
         loadPlayerSettings();
         autoHideControls();
     });
-    
+
     // Inicializar Video.js
     function initializePlayer() {
         const statusIndicator = document.getElementById('statusIndicator');
-        
-        player = videojs('mainPlayer', {
-            fluid: true,
-            responsive: true,
-            controls: true,
-            preload: 'auto',
-            autoplay: true,
-            sources: [{
-                src: '{{ channel.url }}',
-                type: getStreamType('{{ channel.url }}')
-            }],
-            html5: {
-                hlsjs: {
-                    withCredentials: false
-                }
+        const channelId = {{ channel.id }
+    };
+    const originalUrl = '{{ channel.url }}';
+    // Usar URL del proxy para evitar CORS
+    const proxyUrl = `/api/proxy/stream/${channelId}`;
+
+    player = videojs('mainPlayer', {
+        fluid: true,
+        responsive: true,
+        controls: true,
+        preload: 'auto',
+        autoplay: true,
+        sources: [{
+            src: proxyUrl,
+            type: getStreamType(originalUrl)
+        }],
+        html5: {
+            hlsjs: {
+                withCredentials: false
             }
-        });
-        
-        // Eventos del reproductor
-        player.ready(function() {
-            console.log('Reproductor inicializado');
-            statusIndicator.className = 'status-indicator connecting';
-        });
-        
-        player.on('loadstart', function() {
-            statusIndicator.className = 'status-indicator connecting';
-        });
-        
-        player.on('canplay', function() {
-            statusIndicator.className = 'status-indicator connected';
-        });
-        
-        player.on('error', function(error) {
-            console.error('Error en el reproductor:', error);
-            statusIndicator.className = 'status-indicator error';
-            showNotification('Error al reproducir el canal. Verifica la conexión.', 'error');
-        });
-        
-        player.on('play', function() {
-            console.log('Reproducción iniciada');
-        });
-        
-        player.on('pause', function() {
-            console.log('Reproducción pausada');
-        });
+        }
+    });
+
+    // Eventos del reproductor
+    player.ready(function () {
+        console.log('Reproductor inicializado');
+        statusIndicator.className = 'status-indicator connecting';
+    });
+
+    player.on('loadstart', function () {
+        statusIndicator.className = 'status-indicator connecting';
+    });
+
+    player.on('canplay', function () {
+        statusIndicator.className = 'status-indicator connected';
+    });
+
+    player.on('error', function (error) {
+        console.error('Error en el reproductor:', error);
+        statusIndicator.className = 'status-indicator error';
+        showNotification('Error al reproducir el canal. Verifica la conexión.', 'error');
+    });
+
+    player.on('play', function () {
+        console.log('Reproducción iniciada');
+    });
+
+    player.on('pause', function () {
+        console.log('Reproducción pausada');
+    });
     }
-    
+
     // Configurar event listeners
     function setupEventListeners() {
         // Control de volumen
         const volumeSlider = document.getElementById('volumeSlider');
         const volumeDisplay = document.getElementById('volumeDisplay');
-        
-        volumeSlider.addEventListener('input', function() {
+
+        volumeSlider.addEventListener('input', function () {
             const volume = this.value / 100;
             volumeDisplay.textContent = this.value + '%';
             if (player) {
                 player.volume(volume);
             }
         });
-        
+
         // Teclas de acceso rápido
-        document.addEventListener('keydown', function(e) {
+        document.addEventListener('keydown', function (e) {
             if (!player) return;
-            
-            switch(e.code) {
+
+            switch (e.code) {
                 case 'Space':
                     e.preventDefault();
                     if (player.paused()) {
@@ -396,47 +407,47 @@
                     break;
             }
         });
-        
+
         // Ocultar controles automáticamente
         document.addEventListener('mousemove', autoHideControls);
         document.addEventListener('click', autoHideControls);
     }
-    
+
     // Auto-ocultar controles
     function autoHideControls() {
         showControls();
-        
+
         if (hideControlsTimeout) {
             clearTimeout(hideControlsTimeout);
         }
-        
+
         hideControlsTimeout = setTimeout(() => {
             if (player && !player.paused()) {
                 hideControls();
             }
         }, 3000);
     }
-    
+
     // Mostrar controles
     function showControls() {
         const overlay = document.getElementById('controlsOverlay');
         const fullscreenBtn = document.getElementById('fullscreenBtn');
-        
+
         overlay.classList.remove('hidden');
         fullscreenBtn.style.opacity = '1';
         controlsVisible = true;
     }
-    
+
     // Ocultar controles
     function hideControls() {
         const overlay = document.getElementById('controlsOverlay');
         const fullscreenBtn = document.getElementById('fullscreenBtn');
-        
+
         overlay.classList.add('hidden');
         fullscreenBtn.style.opacity = '0.3';
         controlsVisible = false;
     }
-    
+
     // Toggle visibilidad de controles
     function toggleControlsVisibility() {
         if (controlsVisible) {
@@ -446,7 +457,7 @@
             autoHideControls();
         }
     }
-    
+
     // Detectar tipo de stream
     function getStreamType(url) {
         const extension = url.split('.').pop().toLowerCase();
@@ -463,7 +474,7 @@
                 return 'application/x-mpegURL';
         }
     }
-    
+
     // Toggle pantalla completa
     function toggleFullscreen() {
         if (!document.fullscreenElement) {
@@ -474,7 +485,7 @@
             document.getElementById('fullscreenBtn').innerHTML = '<i class="bi bi-arrows-fullscreen"></i>';
         }
     }
-    
+
     // Volver atrás
     function goBack() {
         if (window.history.length > 1) {
@@ -483,13 +494,13 @@
             window.close();
         }
     }
-    
+
     // Toggle favorito
     async function toggleFavorite(channelId, button) {
         try {
             const icon = button.querySelector('i');
             const isFavorite = icon.classList.contains('bi-heart-fill');
-            
+
             if (isFavorite) {
                 await fetch(`/api/favorites/${channelId}`, { method: 'DELETE' });
                 icon.className = 'bi bi-heart';
@@ -503,7 +514,7 @@
             showNotification('Error al actualizar favoritos', 'error');
         }
     }
-    
+
     // Compartir canal
     function shareChannel() {
         if (navigator.share) {
@@ -519,25 +530,25 @@
             });
         }
     }
-    
+
     // Toggle configuración
     function toggleControls() {
         const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
         modal.show();
     }
-    
+
     // Aplicar configuración
     function applySettings() {
         const quality = document.getElementById('qualitySelect').value;
         const autoplay = document.getElementById('autoplayCheck').checked;
         const loop = document.getElementById('loopCheck').checked;
         const volume = document.getElementById('volumeSlider').value / 100;
-        
+
         if (player) {
             player.volume(volume);
             player.loop(loop);
         }
-        
+
         // Guardar configuración
         localStorage.setItem('playerSettings', JSON.stringify({
             quality,
@@ -545,20 +556,20 @@
             loop,
             volume: volume * 100
         }));
-        
+
         showNotification('Configuración aplicada', 'success');
-        
+
         // Cerrar modal
         const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
         modal.hide();
     }
-    
+
     // Cargar configuración guardada
     function loadPlayerSettings() {
         const settings = localStorage.getItem('playerSettings');
         if (settings) {
             const config = JSON.parse(settings);
-            
+
             document.getElementById('qualitySelect').value = config.quality || 'auto';
             document.getElementById('autoplayCheck').checked = config.autoplay || false;
             document.getElementById('loopCheck').checked = config.loop || false;
@@ -566,9 +577,9 @@
             document.getElementById('volumeDisplay').textContent = (config.volume || 50) + '%';
         }
     }
-    
+
     // Limpiar al salir
-    window.addEventListener('beforeunload', function() {
+    window.addEventListener('beforeunload', function () {
         if (player) {
             player.dispose();
         }

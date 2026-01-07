@@ -1,9 +1,10 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, Response
 from flask_cors import CORS
 from .database import Database
 from .m3u_parser import M3UParser
 import os
 import logging
+import requests
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'
@@ -304,6 +305,96 @@ def favorites():
     except Exception as e:
         logger.error(f"Error getting favorites: {e}")
         return render_template('favorites.html', channels=[])
+
+# === Proxy de Streaming ===
+@app.route('/api/proxy/stream/<int:channel_id>')
+def proxy_stream(channel_id):
+    """Proxy de streaming para evitar errores CORS"""
+    try:
+        channel = db.get_channel(channel_id)
+        if not channel:
+            return jsonify({'error': 'Canal no encontrado'}), 404
+        
+        stream_url = channel['url']
+        return stream_proxy_response(stream_url)
+    except Exception as e:
+        logger.error(f"Error in proxy stream: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/proxy/url')
+def proxy_url():
+    """Proxy de streaming por URL directa (para URLs que requieren proxy)"""
+    try:
+        stream_url = request.args.get('url')
+        if not stream_url:
+            return jsonify({'error': 'URL requerida'}), 400
+        
+        return stream_proxy_response(stream_url)
+    except Exception as e:
+        logger.error(f"Error in proxy url: {e}")
+        return jsonify({'error': str(e)}), 500
+
+def stream_proxy_response(stream_url):
+    """Genera una respuesta de streaming proxy"""
+    try:
+        # Headers para simular un navegador
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
+            'Connection': 'keep-alive',
+        }
+        
+        # Hacer petición al servidor remoto con streaming
+        remote_response = requests.get(stream_url, headers=headers, stream=True, timeout=30)
+        
+        # Determinar content-type
+        content_type = remote_response.headers.get('Content-Type', 'application/octet-stream')
+        
+        # Para archivos .mkv, .ts, .mp4 que no tienen content-type correcto
+        if stream_url.endswith('.mkv'):
+            content_type = 'video/x-matroska'
+        elif stream_url.endswith('.ts'):
+            content_type = 'video/mp2t'
+        elif stream_url.endswith('.mp4'):
+            content_type = 'video/mp4'
+        elif stream_url.endswith('.m3u8'):
+            content_type = 'application/vnd.apple.mpegurl'
+        
+        def generate():
+            """Generador para streaming de chunks"""
+            try:
+                for chunk in remote_response.iter_content(chunk_size=8192):
+                    if chunk:
+                        yield chunk
+            except GeneratorExit:
+                remote_response.close()
+            except Exception as e:
+                logger.error(f"Error streaming: {e}")
+                remote_response.close()
+        
+        # Headers de respuesta
+        response_headers = {
+            'Content-Type': content_type,
+            'Access-Control-Allow-Origin': '*',
+            'Accept-Ranges': 'bytes',
+            'Cache-Control': 'no-cache',
+        }
+        
+        # Pasar Content-Length si está disponible
+        if 'Content-Length' in remote_response.headers:
+            response_headers['Content-Length'] = remote_response.headers['Content-Length']
+        
+        return Response(
+            generate(),
+            status=remote_response.status_code,
+            headers=response_headers
+        )
+    except requests.exceptions.Timeout:
+        return jsonify({'error': 'Timeout al conectar con el servidor de streaming'}), 504
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request error in proxy: {e}")
+        return jsonify({'error': f'Error de conexión: {str(e)}'}), 502
 
 @app.route('/health')
 def health_check():

@@ -474,8 +474,11 @@
 
         modal.show();
 
+        // Usar URL del proxy para evitar CORS
+        const proxyUrl = `/api/proxy/stream/${channelId}`;
+
         document.getElementById('quickPlayerModal').addEventListener('shown.bs.modal', function () {
-            initQuickPlayer(channelUrl);
+            initQuickPlayer(proxyUrl, channelUrl);
         }, { once: true });
 
         document.getElementById('quickPlayerModal').addEventListener('hidden.bs.modal', function () {
@@ -486,10 +489,13 @@
         }, { once: true });
     }
 
-    function initQuickPlayer(streamUrl) {
+    function initQuickPlayer(streamUrl, originalUrl) {
         if (quickPlayer) {
             quickPlayer.dispose();
         }
+
+        // Usar originalUrl para determinar el tipo de stream
+        const streamType = getStreamType(originalUrl || streamUrl);
 
         quickPlayer = videojs('quickPlayer', {
             fluid: true,
@@ -498,7 +504,7 @@
             preload: 'none',
             sources: [{
                 src: streamUrl,
-                type: getStreamType(streamUrl)
+                type: streamType
             }],
             html5: {
                 hlsjs: {
