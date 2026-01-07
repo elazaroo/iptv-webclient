@@ -71,6 +71,12 @@ class Database:
                 )
             ''')
             
+            # Índices para mejorar rendimiento
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_channels_playlist ON channels(playlist_id)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_channels_group ON channels(group_id)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_channels_playlist_group ON channels(playlist_id, group_id)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_favorites_channel ON favorites(channel_id)')
+            
             conn.commit()
         finally:
             conn.close()
@@ -164,20 +170,57 @@ class Database:
         finally:
             conn.close()
     
-    def get_channels(self, playlist_id, group_id=None):
-        """Obtener canales de una lista o grupo"""
+    def get_channels(self, playlist_id, group_id=None, limit=None, offset=0):
+        """Obtener canales de una lista o grupo con paginación opcional"""
+        conn = self.get_connection()
+        try:
+            if group_id:
+                query = 'SELECT * FROM channels WHERE playlist_id = ? AND group_id = ? ORDER BY name'
+                params = [playlist_id, group_id]
+            else:
+                query = 'SELECT * FROM channels WHERE playlist_id = ? ORDER BY name'
+                params = [playlist_id]
+            
+            if limit:
+                query += ' LIMIT ? OFFSET ?'
+                params.extend([limit, offset])
+            
+            cursor = conn.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
+    
+    def get_channels_count(self, playlist_id, group_id=None):
+        """Obtener el número total de canales"""
         conn = self.get_connection()
         try:
             if group_id:
                 cursor = conn.execute(
-                    'SELECT * FROM channels WHERE playlist_id = ? AND group_id = ? ORDER BY name',
+                    'SELECT COUNT(*) as count FROM channels WHERE playlist_id = ? AND group_id = ?',
                     (playlist_id, group_id)
                 )
             else:
                 cursor = conn.execute(
-                    'SELECT * FROM channels WHERE playlist_id = ? ORDER BY name',
+                    'SELECT COUNT(*) as count FROM channels WHERE playlist_id = ?',
                     (playlist_id,)
                 )
+            return cursor.fetchone()['count']
+        finally:
+            conn.close()
+    
+    def get_group_counts(self, playlist_id):
+        """Obtener conteo de canales por grupo en una sola query"""
+        conn = self.get_connection()
+        try:
+            cursor = conn.execute(
+                '''SELECT g.id, g.name, COUNT(c.id) as channel_count 
+                   FROM groups g 
+                   LEFT JOIN channels c ON g.id = c.group_id 
+                   WHERE g.playlist_id = ? 
+                   GROUP BY g.id, g.name 
+                   ORDER BY g.name''',
+                (playlist_id,)
+            )
             return [dict(row) for row in cursor.fetchall()]
         finally:
             conn.close()

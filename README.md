@@ -28,14 +28,16 @@ docker-compose -f docker-compose.ghcr.yml up -d
 - **Tag:** `latest`
 - **Título:** `IPTV WebClient`
 - **Icono URL:** `https://cdn-icons-png.flaticon.com/512/3039/3039011.png`
-- **Web UI:** `http://192.168.1.10:3010`
+- **Web UI:** `http://<TU_IP>:3010` (ej: `http://192.168.1.10:3010`)
 - **Puertos:** `3010` → `80` (TCP)
-- **Volúmenes:** `/app/data` → `iptv_data` (Named Volume)
+- **Volúmenes:** `/app/data` → `/DATA/AppData/iptv-webclient` (ruta absoluta)
 - **Variables de entorno:**
   - `FLASK_ENV` → `production`
   - `FLASK_APP` → `app/main.py`
 - **Red:** `bridge`
 - **Política de reinicio:** `unless-stopped`
+
+> ⚠️ **Importante:** CasaOS requiere rutas absolutas para los volúmenes. No uses Named Volumes como `iptv_data`, usa la ruta completa `/DATA/AppData/iptv-webclient`.
 
 ## 🛠️ Desarrollo Local
 

@@ -13,32 +13,30 @@
                     {{ playlist.name }}
                 </h5>
                 <small class="text-muted">
-                    {{ channels|length }} canales
+                    <span id="total-channels-count">{{ total_channels }}</span> canales
                 </small>
             </div>
-            
+
             <div class="list-group list-group-flush">
-                <a href="{{ url_for('view_playlist', playlist_id=playlist.id) }}" 
-                   class="list-group-item list-group-item-action {% if not selected_group %}active{% endif %}">
+                <a href="{{ url_for('view_playlist', playlist_id=playlist.id) }}"
+                    class="list-group-item list-group-item-action {% if not request.args.get('group_id') %}active{% endif %}"
+                    data-group-id="">
                     <i class="bi bi-grid-3x3-gap"></i>
                     Todos los canales
-                    <span class="badge bg-primary rounded-pill float-end">{{ channels|length }}</span>
+                    <span class="badge bg-primary rounded-pill float-end">{{ total_channels }}</span>
                 </a>
-                
+
                 {% for group in groups %}
-                <a href="{{ url_for('view_playlist', playlist_id=playlist.id) }}?group_id={{ group.id }}" 
-                   class="list-group-item list-group-item-action {% if selected_group == group.id|string %}active{% endif %}">
+                <a href="{{ url_for('view_playlist', playlist_id=playlist.id) }}?group_id={{ group.id }}"
+                    class="list-group-item list-group-item-action {% if request.args.get('group_id') == group.id|string %}active{% endif %}"
+                    data-group-id="{{ group.id }}">
                     <i class="bi bi-folder"></i>
                     {{ group.name }}
-                    <span class="badge bg-secondary rounded-pill float-end" id="group-count-{{ group.id }}">
-                        <div class="spinner-border spinner-border-sm" role="status">
-                            <span class="visually-hidden">Cargando...</span>
-                        </div>
-                    </span>
+                    <span class="badge bg-secondary rounded-pill float-end">{{ group.channel_count }}</span>
                 </a>
                 {% endfor %}
             </div>
-            
+
             <div class="p-3 border-top mt-auto">
                 <div class="d-grid gap-2">
                     <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
@@ -47,37 +45,34 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Contenido principal -->
         <div class="col-lg-9 col-md-8 main-content">
             <div class="p-4">
                 <!-- Header -->
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <div>
-                        <h3>
-                            {% if selected_group %}
-                                {% for group in groups %}
-                                    {% if group.id == selected_group|int %}
-                                        <i class="bi bi-folder-open"></i> {{ group.name }}
-                                    {% endif %}
-                                {% endfor %}
-                            {% else %}
-                                <i class="bi bi-grid-3x3-gap"></i> Todos los canales
-                            {% endif %}
+                        <h3 id="section-title">
+                            <i class="bi bi-grid-3x3-gap"></i> <span id="section-name">Todos los canales</span>
                         </h3>
-                        <small class="text-muted">{{ channels|length }} canales disponibles</small>
+                        <small class="text-muted">
+                            <span id="visible-count">0</span> de <span id="total-count">{{ total_channels }}</span>
+                            canales
+                        </small>
                     </div>
-                    
+
                     <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-outline-primary" id="gridViewBtn" onclick="setView('grid')">
+                        <button type="button" class="btn btn-outline-primary" id="gridViewBtn"
+                            onclick="setView('grid')">
                             <i class="bi bi-grid"></i>
                         </button>
-                        <button type="button" class="btn btn-outline-primary active" id="listViewBtn" onclick="setView('list')">
+                        <button type="button" class="btn btn-outline-primary active" id="listViewBtn"
+                            onclick="setView('list')">
                             <i class="bi bi-list"></i>
                         </button>
                     </div>
                 </div>
-                
+
                 <!-- Buscador -->
                 <div class="row mb-4">
                     <div class="col-lg-6">
@@ -85,68 +80,77 @@
                             <span class="input-group-text">
                                 <i class="bi bi-search"></i>
                             </span>
-                            <input type="text" class="form-control" id="searchInput" 
-                                   placeholder="Buscar canales..." onkeyup="filterChannels()">
+                            <input type="text" class="form-control" id="searchInput" placeholder="Buscar canales..."
+                                onkeyup="filterChannels()">
                         </div>
                     </div>
                 </div>
-                
-                <!-- Lista de canales -->
-                <div id="channelsContainer">
-                    {% if channels %}
-                        <div id="channelsList" class="list-view">
-                            {% for channel in channels %}
-                            <div class="card mb-2 channel-item" data-name="{{ channel.name|lower }}" data-group="{{ channel.group_title|lower }}">
-                                <div class="card-body p-3">
-                                    <div class="row align-items-center">
-                                        <div class="col-auto">
-                                            {% if channel.logo %}
-                                            <img src="{{ channel.logo }}" class="channel-logo" 
-                                                 alt="{{ channel.name }}" 
-                                                 onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiByeD0iOCIgZmlsbD0iIzZjNzU3ZCIvPgo8cGF0aCBkPSJNMjQgMTJMMzIgMjRMMjQgMzZIMTZMMjQgMjRMMTYgMTJIMjRaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4='">
-                                            {% else %}
-                                            <div class="channel-logo bg-secondary d-flex align-items-center justify-content-center">
-                                                <i class="bi bi-tv text-white"></i>
-                                            </div>
-                                            {% endif %}
-                                        </div>
-                                        
-                                        <div class="col">
-                                            <h6 class="mb-1">{{ channel.name }}</h6>
-                                            <small class="text-muted">
-                                                <span class="badge bg-light text-dark group-badge">
-                                                    {{ channel.group_title or 'Sin categoría' }}
-                                                </span>
-                                            </small>
-                                        </div>
-                                        
-                                        <div class="col-auto">
-                                            <div class="btn-group btn-group-sm" role="group">
-                                                <button type="button" class="btn btn-outline-primary" 
-                                                        onclick="playChannel({{ channel.id }}, '{{ channel.name }}', '{{ channel.url }}')">
-                                                    <i class="bi bi-play-fill"></i> Reproducir
-                                                </button>
-                                                
-                                                <button type="button" class="btn btn-outline-secondary" 
-                                                        onclick="toggleFavorite({{ channel.id }}, this)">
-                                                    <i class="bi bi-heart"></i>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
+
+                <!-- Loading Skeleton -->
+                <div id="loadingSkeleton" class="mb-4">
+                    <div class="card mb-2 placeholder-glow">
+                        <div class="card-body p-3">
+                            <div class="row align-items-center">
+                                <div class="col-auto">
+                                    <div class="placeholder bg-secondary"
+                                        style="width: 48px; height: 48px; border-radius: 8px;"></div>
+                                </div>
+                                <div class="col">
+                                    <span class="placeholder col-6"></span>
+                                    <span class="placeholder col-4"></span>
                                 </div>
                             </div>
-                            {% endfor %}
                         </div>
-                    {% else %}
-                        <div class="text-center py-5">
-                            <i class="bi bi-tv display-1 text-muted"></i>
-                            <h4 class="mt-3">No hay canales</h4>
-                            <p class="text-muted">No se encontraron canales en esta categoría.</p>
+                    </div>
+                    <div class="card mb-2 placeholder-glow">
+                        <div class="card-body p-3">
+                            <div class="row align-items-center">
+                                <div class="col-auto">
+                                    <div class="placeholder bg-secondary"
+                                        style="width: 48px; height: 48px; border-radius: 8px;"></div>
+                                </div>
+                                <div class="col">
+                                    <span class="placeholder col-7"></span>
+                                    <span class="placeholder col-3"></span>
+                                </div>
+                            </div>
                         </div>
-                    {% endif %}
+                    </div>
+                    <div class="card mb-2 placeholder-glow">
+                        <div class="card-body p-3">
+                            <div class="row align-items-center">
+                                <div class="col-auto">
+                                    <div class="placeholder bg-secondary"
+                                        style="width: 48px; height: 48px; border-radius: 8px;"></div>
+                                </div>
+                                <div class="col">
+                                    <span class="placeholder col-5"></span>
+                                    <span class="placeholder col-4"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                
+
+                <!-- Lista de canales (se llena dinámicamente) -->
+                <div id="channelsContainer">
+                    <div id="channelsList" class="list-view"></div>
+                </div>
+
+                <!-- Loader para cargar más -->
+                <div id="loadMoreTrigger" class="text-center py-3" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Cargando más...</span>
+                    </div>
+                </div>
+
+                <!-- Mensaje cuando no hay canales -->
+                <div id="emptyMessage" class="text-center py-5" style="display: none;">
+                    <i class="bi bi-tv display-1 text-muted"></i>
+                    <h4 class="mt-3">No hay canales</h4>
+                    <p class="text-muted">No se encontraron canales en esta categoría.</p>
+                </div>
+
                 <!-- Mensaje cuando no hay resultados de búsqueda -->
                 <div id="noResults" class="text-center py-5" style="display: none;">
                     <i class="bi bi-search display-1 text-muted"></i>
@@ -191,76 +195,253 @@
 
 {% block extra_js %}
 <script>
+    // === Estado de la aplicación ===
+    const PLAYLIST_ID = {{ playlist.id }};
+    const PAGE_SIZE = 50;
     let currentView = 'list';
     let quickPlayer = null;
-    
-    // Cargar contadores de canales por grupo
-    document.addEventListener('DOMContentLoaded', function() {
-        loadGroupCounts();
+    let currentOffset = 0;
+    let totalChannels = {{ total_channels }};
+    let isLoading = false;
+    let hasMore = true;
+    let allLoadedChannels = [];
+    let currentGroupId = null;
+
+    // Obtener group_id de la URL si existe
+    const urlParams = new URLSearchParams(window.location.search);
+    currentGroupId = urlParams.get('group_id') ? parseInt(urlParams.get('group_id')) : null;
+
+    // === Inicialización ===
+    document.addEventListener('DOMContentLoaded', function () {
+        updateSectionTitle();
+        loadChannels();
+        setupInfiniteScroll();
     });
-    
-    async function loadGroupCounts() {
-        {% for group in groups %}
-        try {
-            const response = await fetch('/api/playlists/{{ playlist.id }}/channels?group_id={{ group.id }}');
-            const channels = await response.json();
-            const badge = document.getElementById('group-count-{{ group.id }}');
-            if (badge) {
-                badge.innerHTML = channels.length;
+
+    // Actualizar título de la sección según el grupo seleccionado
+    function updateSectionTitle() {
+        const sectionName = document.getElementById('section-name');
+        const sectionTitle = document.getElementById('section-title');
+
+        if (currentGroupId) {
+            // Buscar el nombre del grupo en los enlaces del sidebar
+            const groupLink = document.querySelector(`[data-group-id="${currentGroupId}"]`);
+            if (groupLink) {
+                const groupName = groupLink.textContent.trim().replace(/\d+$/, '').trim();
+                sectionName.textContent = groupName;
+                sectionTitle.querySelector('i').className = 'bi bi-folder-open';
             }
-        } catch (error) {
-            console.error('Error loading group count for {{ group.id }}:', error);
         }
-        {% endfor %}
     }
-    
-    // Cambiar vista (lista/grid)
+
+    // === Carga de canales con paginación ===
+    async function loadChannels(reset = false) {
+        if (isLoading) return;
+        if (!reset && !hasMore) return;
+
+        isLoading = true;
+
+        if (reset) {
+            currentOffset = 0;
+            allLoadedChannels = [];
+            document.getElementById('channelsList').innerHTML = '';
+            document.getElementById('loadingSkeleton').style.display = 'block';
+            hasMore = true;
+        }
+
+        document.getElementById('loadMoreTrigger').style.display = hasMore ? 'block' : 'none';
+
+        try {
+            let url = `/api/playlists/${PLAYLIST_ID}/channels?limit=${PAGE_SIZE}&offset=${currentOffset}`;
+            if (currentGroupId) {
+                url += `&group_id=${currentGroupId}`;
+            }
+
+            const response = await fetch(url);
+            const data = await response.json();
+
+            // Ocultar skeleton después de primera carga
+            document.getElementById('loadingSkeleton').style.display = 'none';
+
+            if (data.channels && data.channels.length > 0) {
+                allLoadedChannels = allLoadedChannels.concat(data.channels);
+                renderChannels(data.channels, false);
+                currentOffset += data.channels.length;
+                hasMore = data.has_more;
+                totalChannels = data.total;
+            } else if (currentOffset === 0) {
+                // No hay canales
+                document.getElementById('emptyMessage').style.display = 'block';
+            }
+
+            // Actualizar contadores
+            document.getElementById('visible-count').textContent = allLoadedChannels.length;
+            document.getElementById('total-count').textContent = totalChannels;
+
+            document.getElementById('loadMoreTrigger').style.display = hasMore ? 'block' : 'none';
+
+        } catch (error) {
+            console.error('Error loading channels:', error);
+            document.getElementById('loadingSkeleton').style.display = 'none';
+            showNotification('Error al cargar canales', 'error');
+        } finally {
+            isLoading = false;
+        }
+    }
+
+    // Renderizar canales en el DOM
+    function renderChannels(channels, clear = true) {
+        const container = document.getElementById('channelsList');
+
+        if (clear) {
+            container.innerHTML = '';
+        }
+
+        const fragment = document.createDocumentFragment();
+
+        channels.forEach(channel => {
+            const channelEl = createChannelElement(channel);
+            fragment.appendChild(channelEl);
+        });
+
+        container.appendChild(fragment);
+
+        // Aplicar vista actual
+        if (currentView === 'grid') {
+            applyGridView();
+        }
+    }
+
+    // Crear elemento HTML de un canal
+    function createChannelElement(channel) {
+        const div = document.createElement('div');
+        div.className = 'card mb-2 channel-item';
+        div.setAttribute('data-name', (channel.name || '').toLowerCase());
+        div.setAttribute('data-group', (channel.group_title || '').toLowerCase());
+        div.setAttribute('data-id', channel.id);
+
+        const logoSrc = channel.logo || '';
+        const logoHtml = logoSrc
+            ? `<img src="${escapeHtml(logoSrc)}" class="channel-logo" alt="${escapeHtml(channel.name)}" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiByeD0iOCIgZmlsbD0iIzZjNzU3ZCIvPgo8cGF0aCBkPSJNMjQgMTJMMzIgMjRMMjQgMzZIMTZMMjQgMjRMMTYgMTJIMjRaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4='">`
+            : `<div class="channel-logo bg-secondary d-flex align-items-center justify-content-center"><i class="bi bi-tv text-white"></i></div>`;
+
+        div.innerHTML = `
+            <div class="card-body p-3">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        ${logoHtml}
+                    </div>
+                    <div class="col">
+                        <h6 class="mb-1">${escapeHtml(channel.name)}</h6>
+                        <small class="text-muted">
+                            <span class="badge bg-light text-dark group-badge">
+                                ${escapeHtml(channel.group_title || 'Sin categoría')}
+                            </span>
+                        </small>
+                    </div>
+                    <div class="col-auto">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-primary" 
+                                    onclick="playChannel(${channel.id}, '${escapeJs(channel.name)}', '${escapeJs(channel.url)}')">
+                                <i class="bi bi-play-fill"></i> Reproducir
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" 
+                                    onclick="toggleFavorite(${channel.id}, this)">
+                                <i class="bi bi-heart"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        return div;
+    }
+
+    // Escapar HTML para prevenir XSS
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Escapar para JavaScript strings
+    function escapeJs(text) {
+        if (!text) return '';
+        return text.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    }
+
+    // === Infinite Scroll con Intersection Observer ===
+    function setupInfiniteScroll() {
+        const trigger = document.getElementById('loadMoreTrigger');
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting && !isLoading && hasMore) {
+                    loadChannels();
+                }
+            });
+        }, {
+            rootMargin: '100px'
+        });
+
+        observer.observe(trigger);
+    }
+
+    // === Cambiar vista (lista/grid) ===
     function setView(view) {
         currentView = view;
         const container = document.getElementById('channelsList');
         const gridBtn = document.getElementById('gridViewBtn');
         const listBtn = document.getElementById('listViewBtn');
-        
+
         if (view === 'grid') {
-            container.className = 'row g-3 grid-view';
+            applyGridView();
             gridBtn.classList.add('active');
             listBtn.classList.remove('active');
-            
-            // Convertir a grid
-            const channels = container.querySelectorAll('.channel-item');
-            channels.forEach(channel => {
-                channel.className = 'col-lg-4 col-md-6 channel-item';
-                const card = channel.querySelector('.card');
-                card.className = 'card h-100 channel-item-grid';
-            });
         } else {
-            container.className = 'list-view';
+            applyListView();
             listBtn.classList.add('active');
             gridBtn.classList.remove('active');
-            
-            // Convertir a lista
-            const channels = container.querySelectorAll('.channel-item');
-            channels.forEach(channel => {
-                channel.className = 'card mb-2 channel-item';
-                const card = channel.querySelector('.card, .channel-item-grid');
-                if (card) {
-                    card.className = 'card mb-2 channel-item';
-                }
-            });
         }
     }
-    
-    // Filtrar canales
+
+    function applyGridView() {
+        const container = document.getElementById('channelsList');
+        container.className = 'row g-3 grid-view';
+
+        const channels = container.querySelectorAll('.channel-item');
+        channels.forEach(channel => {
+            channel.className = 'col-lg-4 col-md-6 channel-item';
+            channel.setAttribute('data-name', channel.getAttribute('data-name'));
+            channel.setAttribute('data-group', channel.getAttribute('data-group'));
+        });
+    }
+
+    function applyListView() {
+        const container = document.getElementById('channelsList');
+        container.className = 'list-view';
+
+        const channels = container.querySelectorAll('.channel-item');
+        channels.forEach(channel => {
+            channel.className = 'card mb-2 channel-item';
+            channel.setAttribute('data-name', channel.getAttribute('data-name'));
+            channel.setAttribute('data-group', channel.getAttribute('data-group'));
+        });
+    }
+
+    // === Filtrar canales ===
     function filterChannels() {
         const searchTerm = document.getElementById('searchInput').value.toLowerCase();
         const channels = document.querySelectorAll('.channel-item');
         const noResults = document.getElementById('noResults');
         let visibleCount = 0;
-        
+
         channels.forEach(channel => {
-            const name = channel.getAttribute('data-name');
-            const group = channel.getAttribute('data-group');
-            
+            const name = channel.getAttribute('data-name') || '';
+            const group = channel.getAttribute('data-group') || '';
+
             if (name.includes(searchTerm) || group.includes(searchTerm)) {
                 channel.style.display = '';
                 visibleCount++;
@@ -268,54 +449,48 @@
                 channel.style.display = 'none';
             }
         });
-        
+
         if (visibleCount === 0 && searchTerm) {
             noResults.style.display = 'block';
         } else {
             noResults.style.display = 'none';
         }
+
+        document.getElementById('visible-count').textContent = visibleCount;
     }
-    
-    // Reproducir canal
+
+    // === Reproducir canal ===
     function playChannel(channelId, channelName, channelUrl) {
-        // Opción 1: Modal rápido
         showQuickPlayer(channelId, channelName, channelUrl);
-        
-        // Opción 2: Página completa (comentada)
-        // window.open(`/player?channel_id=${channelId}`, '_blank');
     }
-    
-    // Mostrar reproductor rápido
+
     function showQuickPlayer(channelId, channelName, channelUrl) {
         const modal = new bootstrap.Modal(document.getElementById('quickPlayerModal'));
         const title = document.getElementById('quickPlayerTitle');
         const fullPlayerLink = document.getElementById('fullPlayerLink');
-        
+
         title.textContent = channelName;
         fullPlayerLink.href = `/player?channel_id=${channelId}`;
-        
+
         modal.show();
-        
-        // Inicializar reproductor cuando se muestre el modal
-        document.getElementById('quickPlayerModal').addEventListener('shown.bs.modal', function() {
+
+        document.getElementById('quickPlayerModal').addEventListener('shown.bs.modal', function () {
             initQuickPlayer(channelUrl);
         }, { once: true });
-        
-        // Limpiar reproductor cuando se cierre el modal
-        document.getElementById('quickPlayerModal').addEventListener('hidden.bs.modal', function() {
+
+        document.getElementById('quickPlayerModal').addEventListener('hidden.bs.modal', function () {
             if (quickPlayer) {
                 quickPlayer.dispose();
                 quickPlayer = null;
             }
         }, { once: true });
     }
-    
-    // Inicializar reproductor Video.js
+
     function initQuickPlayer(streamUrl) {
         if (quickPlayer) {
             quickPlayer.dispose();
         }
-        
+
         quickPlayer = videojs('quickPlayer', {
             fluid: true,
             responsive: true,
@@ -331,20 +506,19 @@
                 }
             }
         });
-        
-        quickPlayer.ready(function() {
+
+        quickPlayer.ready(function () {
             console.log('Reproductor listo');
         });
-        
-        quickPlayer.on('error', function(error) {
+
+        quickPlayer.on('error', function (error) {
             console.error('Error en el reproductor:', error);
             showNotification('Error al reproducir el canal', 'error');
         });
     }
-    
-    // Detectar tipo de stream
+
     function getStreamType(url) {
-        const extension = url.split('.').pop().toLowerCase();
+        const extension = url.split('.').pop().toLowerCase().split('?')[0];
         switch (extension) {
             case 'm3u8':
                 return 'application/x-mpegURL';
@@ -355,25 +529,23 @@
             case 'ogg':
                 return 'video/ogg';
             default:
-                return 'application/x-mpegURL'; // Por defecto para streams IPTV
+                return 'application/x-mpegURL';
         }
     }
-    
-    // Toggle favorito
+
+    // === Favoritos ===
     async function toggleFavorite(channelId, button) {
         try {
             const icon = button.querySelector('i');
             const isFavorite = icon.classList.contains('bi-heart-fill');
-            
+
             if (isFavorite) {
-                // Quitar de favoritos
                 await fetch(`/api/favorites/${channelId}`, { method: 'DELETE' });
                 icon.className = 'bi bi-heart';
                 button.classList.remove('btn-warning');
                 button.classList.add('btn-outline-secondary');
                 showNotification('Canal quitado de favoritos', 'info');
             } else {
-                // Agregar a favoritos
                 await fetch(`/api/favorites/${channelId}`, { method: 'POST' });
                 icon.className = 'bi bi-heart-fill';
                 button.classList.remove('btn-outline-secondary');
@@ -387,23 +559,23 @@
 </script>
 
 <style>
-.channel-item-grid {
-    transition: transform 0.2s ease;
-}
+    .channel-item-grid {
+        transition: transform 0.2s ease;
+    }
 
-.channel-item-grid:hover {
-    transform: translateY(-2px);
-}
+    .channel-item-grid:hover {
+        transform: translateY(-2px);
+    }
 
-.grid-view .channel-item .card-body {
-    text-align: center;
-}
+    .grid-view .channel-item .card-body {
+        text-align: center;
+    }
 
-.grid-view .channel-logo {
-    width: 64px;
-    height: 64px;
-    margin: 0 auto 10px;
-    display: block;
-}
+    .grid-view .channel-logo {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 10px;
+        display: block;
+    }
 </style>
 {% endblock %}

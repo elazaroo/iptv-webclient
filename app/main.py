@@ -147,10 +147,36 @@ def add_playlist():
 @app.route('/api/playlists/<int:playlist_id>/channels')
 def get_channels(playlist_id):
     try:
-        channels = db.get_channels(playlist_id)
-        return jsonify({'channels': channels})
+        # Parámetros de paginación
+        limit = request.args.get('limit', type=int)
+        offset = request.args.get('offset', 0, type=int)
+        group_id = request.args.get('group_id', type=int)
+        
+        channels = db.get_channels(playlist_id, group_id=group_id, limit=limit, offset=offset)
+        total = db.get_channels_count(playlist_id, group_id=group_id)
+        
+        return jsonify({
+            'channels': channels,
+            'total': total,
+            'limit': limit,
+            'offset': offset,
+            'has_more': (offset + len(channels)) < total if limit else False
+        })
     except Exception as e:
         logger.error(f"Error getting channels: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/playlists/<int:playlist_id>/group-counts')
+def get_group_counts(playlist_id):
+    try:
+        groups = db.get_group_counts(playlist_id)
+        total_channels = db.get_channels_count(playlist_id)
+        return jsonify({
+            'groups': groups,
+            'total_channels': total_channels
+        })
+    except Exception as e:
+        logger.error(f"Error getting group counts: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/playlists/<int:playlist_id>/groups')
@@ -188,13 +214,16 @@ def view_playlist(playlist_id):
             flash('Playlist no encontrada', 'error')
             return redirect(url_for('index'))
         
-        channels = db.get_channels(playlist_id)
-        groups = db.get_groups(playlist_id)
+        # Obtener grupos con contadores (una sola query)
+        groups = db.get_group_counts(playlist_id)
+        total_channels = db.get_channels_count(playlist_id)
         
+        # Ya NO cargamos todos los canales aquí - se cargan vía JavaScript
         return render_template('playlist.html', 
-                             playlist=playlist, 
-                             channels=channels, 
-                             groups=groups)
+                             playlist=playlist,
+                             groups=groups,
+                             total_channels=total_channels,
+                             channels=[])  # Lista vacía, se carga vía API
     except Exception as e:
         logger.error(f"Error viewing playlist: {e}")
         flash('Error al cargar la playlist', 'error')
