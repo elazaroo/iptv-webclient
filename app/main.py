@@ -346,25 +346,34 @@ def stream_proxy_response(stream_url):
         }
         
         # Hacer petición al servidor remoto con streaming
-        remote_response = requests.get(stream_url, headers=headers, stream=True, timeout=30)
+        # Timeout más largo para videos grandes
+        remote_response = requests.get(stream_url, headers=headers, stream=True, timeout=(10, 300))
         
-        # Determinar content-type
+        # Determinar content-type basado en extensión o header
         content_type = remote_response.headers.get('Content-Type', 'application/octet-stream')
         
-        # Para archivos .mkv, .ts, .mp4 que no tienen content-type correcto
-        if stream_url.endswith('.mkv'):
+        # Limpiar URL de query params para detectar extensión
+        clean_url = stream_url.split('?')[0].lower()
+        
+        # Para archivos que no tienen content-type correcto
+        if clean_url.endswith('.mkv') or 'mkv' in stream_url.lower():
             content_type = 'video/x-matroska'
-        elif stream_url.endswith('.ts'):
+        elif clean_url.endswith('.ts'):
             content_type = 'video/mp2t'
-        elif stream_url.endswith('.mp4'):
+        elif clean_url.endswith('.mp4'):
             content_type = 'video/mp4'
-        elif stream_url.endswith('.m3u8'):
+        elif clean_url.endswith('.avi'):
+            content_type = 'video/x-msvideo'
+        elif clean_url.endswith('.m3u8'):
             content_type = 'application/vnd.apple.mpegurl'
+        elif clean_url.endswith('.m3u'):
+            content_type = 'audio/x-mpegurl'
         
         def generate():
             """Generador para streaming de chunks"""
             try:
-                for chunk in remote_response.iter_content(chunk_size=8192):
+                # Chunks más grandes para mejor rendimiento
+                for chunk in remote_response.iter_content(chunk_size=65536):
                     if chunk:
                         yield chunk
             except GeneratorExit:
@@ -373,22 +382,21 @@ def stream_proxy_response(stream_url):
                 logger.error(f"Error streaming: {e}")
                 remote_response.close()
         
-        # Headers de respuesta
+        # Headers de respuesta - NO incluir Content-Length para usar chunked transfer
         response_headers = {
             'Content-Type': content_type,
             'Access-Control-Allow-Origin': '*',
-            'Accept-Ranges': 'bytes',
-            'Cache-Control': 'no-cache',
+            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Range',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'X-Accel-Buffering': 'no',  # Deshabilitar buffering en nginx si existe
         }
-        
-        # Pasar Content-Length si está disponible
-        if 'Content-Length' in remote_response.headers:
-            response_headers['Content-Length'] = remote_response.headers['Content-Length']
         
         return Response(
             generate(),
             status=remote_response.status_code,
-            headers=response_headers
+            headers=response_headers,
+            direct_passthrough=True  # Pasar bytes directamente sin procesar
         )
     except requests.exceptions.Timeout:
         return jsonify({'error': 'Timeout al conectar con el servidor de streaming'}), 504
