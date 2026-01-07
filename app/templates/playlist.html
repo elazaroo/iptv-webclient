@@ -474,11 +474,11 @@
 
         modal.show();
 
-        // Usar URL del proxy para evitar CORS
-        const proxyUrl = `/api/proxy/stream/${channelId}`;
+        // Usar URL del stream HLS
+        const hlsUrl = `/api/stream/${channelId}/playlist.m3u8`;
 
         document.getElementById('quickPlayerModal').addEventListener('shown.bs.modal', function () {
-            initQuickPlayer(proxyUrl, channelUrl);
+            initQuickPlayer(hlsUrl);
         }, { once: true });
 
         document.getElementById('quickPlayerModal').addEventListener('hidden.bs.modal', function () {
@@ -486,35 +486,35 @@
                 quickPlayer.dispose();
                 quickPlayer = null;
             }
+            // Detener el stream cuando se cierra el modal
+            fetch(`/api/stream/${channelId}/stop`).catch(() => { });
         }, { once: true });
     }
 
-    function initQuickPlayer(streamUrl, originalUrl) {
+    function initQuickPlayer(streamUrl) {
         if (quickPlayer) {
             quickPlayer.dispose();
         }
-
-        // Usar originalUrl para determinar el tipo de stream
-        const streamType = getStreamType(originalUrl || streamUrl);
 
         quickPlayer = videojs('quickPlayer', {
             fluid: true,
             responsive: true,
             controls: true,
-            preload: 'none',
+            preload: 'auto',
             sources: [{
                 src: streamUrl,
-                type: streamType
+                type: 'application/x-mpegURL'  // Siempre HLS
             }],
             html5: {
-                hlsjs: {
-                    withCredentials: false
+                vhs: {
+                    overrideNative: true
                 }
             }
         });
 
         quickPlayer.ready(function () {
             console.log('Reproductor listo');
+            quickPlayer.play();
         });
 
         quickPlayer.on('error', function (error) {

@@ -1,10 +1,16 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, Response
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, Response, send_from_directory
 from flask_cors import CORS
 from .database import Database
 from .m3u_parser import M3UParser
 import os
 import logging
 import requests
+import subprocess
+import threading
+import time
+import shutil
+import hashlib
+from pathlib import Path
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'
@@ -14,14 +20,71 @@ CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Asegurar que el directorio de datos existe
-os.makedirs('/app/data', exist_ok=True)
+# Configuración de directorios
+DATA_DIR = os.environ.get('DATA_DIR', '/app/data')
+HLS_DIR = os.environ.get('HLS_DIR', '/tmp/hls')
+FFMPEG_PATH = os.environ.get('FFMPEG_PATH', '/usr/bin/ffmpeg')
+
+# Asegurar que los directorios existen
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(HLS_DIR, exist_ok=True)
+
+# Diccionario para tracking de procesos FFmpeg activos
+# {stream_id: {'process': subprocess, 'last_access': timestamp, 'url': original_url}}
+active_streams = {}
+streams_lock = threading.Lock()
 
 # Inicializar base de datos
-db = Database('/app/data/iptv.db')
+db = Database(os.path.join(DATA_DIR, 'iptv.db'))
 
 # Inicializar parser
 parser = M3UParser()
+
+def cleanup_old_streams():
+    """Limpia streams que no han sido accedidos en los últimos 5 minutos"""
+    while True:
+        time.sleep(60)  # Verificar cada minuto
+        current_time = time.time()
+        streams_to_remove = []
+        
+        with streams_lock:
+            for stream_id, stream_info in active_streams.items():
+                # Si el stream no ha sido accedido en 5 minutos, terminarlo
+                if current_time - stream_info['last_access'] > 300:
+                    streams_to_remove.append(stream_id)
+        
+        for stream_id in streams_to_remove:
+            stop_stream(stream_id)
+
+def stop_stream(stream_id):
+    """Detiene un stream y limpia sus archivos"""
+    with streams_lock:
+        if stream_id in active_streams:
+            stream_info = active_streams[stream_id]
+            process = stream_info.get('process')
+            
+            # Terminar proceso FFmpeg
+            if process and process.poll() is None:
+                try:
+                    process.terminate()
+                    process.wait(timeout=5)
+                except:
+                    process.kill()
+            
+            # Eliminar directorio de HLS
+            stream_dir = os.path.join(HLS_DIR, stream_id)
+            if os.path.exists(stream_dir):
+                try:
+                    shutil.rmtree(stream_dir)
+                except Exception as e:
+                    logger.error(f"Error removing stream dir {stream_dir}: {e}")
+            
+            del active_streams[stream_id]
+            logger.info(f"Stream {stream_id} stopped and cleaned up")
+
+# Iniciar thread de limpieza
+cleanup_thread = threading.Thread(target=cleanup_old_streams, daemon=True)
+cleanup_thread.start()
 
 @app.route('/')
 def index():
@@ -306,103 +369,267 @@ def favorites():
         logger.error(f"Error getting favorites: {e}")
         return render_template('favorites.html', channels=[])
 
-# === Proxy de Streaming ===
-@app.route('/api/proxy/stream/<int:channel_id>')
-def proxy_stream(channel_id):
-    """Proxy de streaming para evitar errores CORS"""
+# === Sistema de Streaming HLS con FFmpeg ===
+
+def get_stream_id(channel_id, url):
+    """Genera un ID único para el stream basado en channel_id y URL"""
+    hash_input = f"{channel_id}:{url}"
+    return hashlib.md5(hash_input.encode()).hexdigest()[:16]
+
+def is_native_hls(url):
+    """Verifica si la URL ya es un stream HLS nativo"""
+    clean_url = url.split('?')[0].lower()
+    return clean_url.endswith('.m3u8')
+
+def start_ffmpeg_stream(stream_id, source_url):
+    """Inicia transcoding FFmpeg para el stream"""
+    stream_dir = os.path.join(HLS_DIR, stream_id)
+    os.makedirs(stream_dir, exist_ok=True)
+    
+    playlist_path = os.path.join(stream_dir, 'playlist.m3u8')
+    
+    # Comando FFmpeg para transcoding a HLS
+    cmd = [
+        FFMPEG_PATH,
+        '-y',  # Sobrescribir archivos existentes
+        '-loglevel', 'warning',
+        '-reconnect', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_delay_max', '5',
+        '-i', source_url,
+        # Video: copiar si es H.264, sino transcodificar
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-tune', 'zerolatency',
+        '-profile:v', 'baseline',
+        '-level', '3.0',
+        '-pix_fmt', 'yuv420p',
+        # Audio: convertir a AAC
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ac', '2',
+        # Formato HLS
+        '-f', 'hls',
+        '-hls_time', '4',
+        '-hls_list_size', '10',
+        '-hls_flags', 'delete_segments+append_list',
+        '-hls_segment_filename', os.path.join(stream_dir, 'segment_%03d.ts'),
+        playlist_path
+    ]
+    
+    logger.info(f"Starting FFmpeg for stream {stream_id}: {source_url}")
+    
+    # Iniciar FFmpeg en background
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL
+    )
+    
+    # Registrar en active_streams
+    with streams_lock:
+        active_streams[stream_id] = {
+            'process': process,
+            'last_access': time.time(),
+            'url': source_url,
+            'dir': stream_dir
+        }
+    
+    return playlist_path
+
+def wait_for_playlist(playlist_path, timeout=30):
+    """Espera hasta que el playlist HLS esté disponible"""
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        if os.path.exists(playlist_path):
+            # Verificar que tiene al menos un segmento
+            try:
+                with open(playlist_path, 'r') as f:
+                    content = f.read()
+                    if '.ts' in content:
+                        return True
+            except:
+                pass
+        time.sleep(0.5)
+    return False
+
+@app.route('/api/stream/<int:channel_id>/playlist.m3u8')
+def hls_playlist(channel_id):
+    """Sirve el playlist HLS para un canal"""
     try:
         channel = db.get_channel(channel_id)
         if not channel:
             return jsonify({'error': 'Canal no encontrado'}), 404
         
-        stream_url = channel['url']
-        return stream_proxy_response(stream_url)
+        source_url = channel['url']
+        
+        # Si ya es HLS nativo, redirigir con proxy
+        if is_native_hls(source_url):
+            return proxy_m3u8(source_url)
+        
+        # Generar stream_id único
+        stream_id = get_stream_id(channel_id, source_url)
+        stream_dir = os.path.join(HLS_DIR, stream_id)
+        playlist_path = os.path.join(stream_dir, 'playlist.m3u8')
+        
+        # Verificar si el stream ya está activo
+        with streams_lock:
+            if stream_id in active_streams:
+                # Actualizar timestamp de acceso
+                active_streams[stream_id]['last_access'] = time.time()
+                
+                # Si el proceso murió, reiniciarlo
+                process = active_streams[stream_id].get('process')
+                if process and process.poll() is not None:
+                    logger.warning(f"Stream {stream_id} died, restarting...")
+                    del active_streams[stream_id]
+                    start_ffmpeg_stream(stream_id, source_url)
+            else:
+                # Iniciar nuevo stream
+                start_ffmpeg_stream(stream_id, source_url)
+        
+        # Esperar a que el playlist esté disponible
+        if not wait_for_playlist(playlist_path, timeout=15):
+            return jsonify({'error': 'Timeout esperando inicio de transcoding'}), 504
+        
+        # Leer y modificar el playlist para usar rutas relativas correctas
+        try:
+            with open(playlist_path, 'r') as f:
+                content = f.read()
+            
+            # Reemplazar rutas de segmentos para que usen nuestra API
+            content = content.replace(
+                stream_dir + '/',
+                f'/api/stream/{channel_id}/segments/'
+            )
+            content = content.replace(
+                'segment_',
+                f'/api/stream/{channel_id}/segments/segment_'
+            )
+            
+            response = Response(content, mimetype='application/vnd.apple.mpegurl')
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Cache-Control'] = 'no-cache'
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error reading playlist: {e}")
+            return jsonify({'error': 'Error leyendo playlist'}), 500
+            
     except Exception as e:
-        logger.error(f"Error in proxy stream: {e}")
+        logger.error(f"Error in hls_playlist: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/stream/<int:channel_id>/segments/<segment>')
+def hls_segment(channel_id, segment):
+    """Sirve un segmento HLS"""
+    try:
+        channel = db.get_channel(channel_id)
+        if not channel:
+            return jsonify({'error': 'Canal no encontrado'}), 404
+        
+        source_url = channel['url']
+        stream_id = get_stream_id(channel_id, source_url)
+        stream_dir = os.path.join(HLS_DIR, stream_id)
+        
+        # Actualizar timestamp de acceso
+        with streams_lock:
+            if stream_id in active_streams:
+                active_streams[stream_id]['last_access'] = time.time()
+        
+        # Servir el segmento
+        if os.path.exists(os.path.join(stream_dir, segment)):
+            response = send_from_directory(stream_dir, segment)
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Cache-Control'] = 'no-cache'
+            return response
+        else:
+            return jsonify({'error': 'Segmento no encontrado'}), 404
+            
+    except Exception as e:
+        logger.error(f"Error serving segment: {e}")
+        return jsonify({'error': str(e)}), 500
+
+def proxy_m3u8(url):
+    """Proxy para playlists M3U8 nativos"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        # Modificar URLs relativas en el playlist
+        content = response.text
+        base_url = url.rsplit('/', 1)[0] + '/'
+        
+        # Convertir rutas relativas a absolutas
+        lines = content.split('\n')
+        modified_lines = []
+        for line in lines:
+            if line.strip() and not line.startswith('#'):
+                if not line.startswith('http'):
+                    # Es una ruta relativa, convertir a absoluta
+                    line = base_url + line
+                # Usar nuestro proxy para cada URL
+                line = f'/api/proxy/url?url={line}'
+            modified_lines.append(line)
+        
+        modified_content = '\n'.join(modified_lines)
+        
+        resp = Response(modified_content, mimetype='application/vnd.apple.mpegurl')
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp
+        
+    except Exception as e:
+        logger.error(f"Error proxying m3u8: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/proxy/url')
 def proxy_url():
-    """Proxy de streaming por URL directa (para URLs que requieren proxy)"""
+    """Proxy simple para URLs (usado para segmentos de HLS nativo)"""
     try:
         stream_url = request.args.get('url')
         if not stream_url:
             return jsonify({'error': 'URL requerida'}), 400
         
-        return stream_proxy_response(stream_url)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        }
+        
+        remote_response = requests.get(stream_url, headers=headers, stream=True, timeout=(10, 60))
+        
+        def generate():
+            for chunk in remote_response.iter_content(chunk_size=65536):
+                if chunk:
+                    yield chunk
+        
+        response_headers = {
+            'Content-Type': remote_response.headers.get('Content-Type', 'video/mp2t'),
+            'Access-Control-Allow-Origin': '*',
+        }
+        
+        return Response(generate(), headers=response_headers)
+        
     except Exception as e:
         logger.error(f"Error in proxy url: {e}")
         return jsonify({'error': str(e)}), 500
 
-def stream_proxy_response(stream_url):
-    """Genera una respuesta de streaming proxy"""
+@app.route('/api/stream/<int:channel_id>/stop')
+def stop_channel_stream(channel_id):
+    """Detiene manualmente un stream"""
     try:
-        # Headers para simular un navegador
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': '*/*',
-            'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
-            'Connection': 'keep-alive',
-        }
+        channel = db.get_channel(channel_id)
+        if not channel:
+            return jsonify({'error': 'Canal no encontrado'}), 404
         
-        # Hacer petición al servidor remoto con streaming
-        # Timeout más largo para videos grandes
-        remote_response = requests.get(stream_url, headers=headers, stream=True, timeout=(10, 300))
+        stream_id = get_stream_id(channel_id, channel['url'])
+        stop_stream(stream_id)
         
-        # Determinar content-type basado en extensión o header
-        content_type = remote_response.headers.get('Content-Type', 'application/octet-stream')
-        
-        # Limpiar URL de query params para detectar extensión
-        clean_url = stream_url.split('?')[0].lower()
-        
-        # Para archivos que no tienen content-type correcto
-        if clean_url.endswith('.mkv') or 'mkv' in stream_url.lower():
-            content_type = 'video/x-matroska'
-        elif clean_url.endswith('.ts'):
-            content_type = 'video/mp2t'
-        elif clean_url.endswith('.mp4'):
-            content_type = 'video/mp4'
-        elif clean_url.endswith('.avi'):
-            content_type = 'video/x-msvideo'
-        elif clean_url.endswith('.m3u8'):
-            content_type = 'application/vnd.apple.mpegurl'
-        elif clean_url.endswith('.m3u'):
-            content_type = 'audio/x-mpegurl'
-        
-        def generate():
-            """Generador para streaming de chunks"""
-            try:
-                # Chunks más grandes para mejor rendimiento
-                for chunk in remote_response.iter_content(chunk_size=65536):
-                    if chunk:
-                        yield chunk
-            except GeneratorExit:
-                remote_response.close()
-            except Exception as e:
-                logger.error(f"Error streaming: {e}")
-                remote_response.close()
-        
-        # Headers de respuesta - NO incluir Content-Length para usar chunked transfer
-        response_headers = {
-            'Content-Type': content_type,
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Range',
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'X-Accel-Buffering': 'no',  # Deshabilitar buffering en nginx si existe
-        }
-        
-        return Response(
-            generate(),
-            status=remote_response.status_code,
-            headers=response_headers,
-            direct_passthrough=True  # Pasar bytes directamente sin procesar
-        )
-    except requests.exceptions.Timeout:
-        return jsonify({'error': 'Timeout al conectar con el servidor de streaming'}), 504
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Request error in proxy: {e}")
-        return jsonify({'error': f'Error de conexión: {str(e)}'}), 502
+        return jsonify({'success': True, 'message': 'Stream detenido'})
+    except Exception as e:
+        logger.error(f"Error stopping stream: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/health')
 def health_check():

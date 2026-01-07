@@ -311,9 +311,8 @@
         const statusIndicator = document.getElementById('statusIndicator');
         const channelId = {{ channel.id }
     };
-    const originalUrl = '{{ channel.url }}';
-    // Usar URL del proxy para evitar CORS
-    const proxyUrl = `/api/proxy/stream/${channelId}`;
+    // Usar URL del stream HLS con FFmpeg
+    const hlsUrl = `/api/stream/${channelId}/playlist.m3u8`;
 
     player = videojs('mainPlayer', {
         fluid: true,
@@ -322,12 +321,12 @@
         preload: 'auto',
         autoplay: true,
         sources: [{
-            src: proxyUrl,
-            type: getStreamType(originalUrl)
+            src: hlsUrl,
+            type: 'application/x-mpegURL'
         }],
         html5: {
-            hlsjs: {
-                withCredentials: false
+            vhs: {
+                overrideNative: true
             }
         }
     });
