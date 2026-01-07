@@ -387,43 +387,47 @@ def start_ffmpeg_stream(stream_id, source_url):
     os.makedirs(stream_dir, exist_ok=True)
     
     playlist_path = os.path.join(stream_dir, 'playlist.m3u8')
+    error_log_path = os.path.join(stream_dir, 'ffmpeg_error.log')
     
-    # Comando FFmpeg para transcoding a HLS
+    # Comando FFmpeg optimizado - intentar copiar streams cuando sea posible
     cmd = [
         FFMPEG_PATH,
-        '-y',  # Sobrescribir archivos existentes
-        '-loglevel', 'warning',
+        '-y',
+        '-loglevel', 'info',
+        '-hide_banner',
+        # Opciones de entrada con timeout
+        '-timeout', '10000000',  # 10 segundos en microsegundos
         '-reconnect', '1',
-        '-reconnect_streamed', '1',
+        '-reconnect_streamed', '1', 
         '-reconnect_delay_max', '5',
         '-i', source_url,
-        # Video: copiar si es H.264, sino transcodificar
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-tune', 'zerolatency',
-        '-profile:v', 'baseline',
-        '-level', '3.0',
-        '-pix_fmt', 'yuv420p',
-        # Audio: convertir a AAC
+        # Intentar copiar video, si falla re-codificar
+        '-c:v', 'copy',
+        # Audio: convertir a AAC para compatibilidad
         '-c:a', 'aac',
         '-b:a', '128k',
         '-ac', '2',
         # Formato HLS
         '-f', 'hls',
-        '-hls_time', '4',
+        '-hls_time', '2',  # Segmentos más cortos para inicio más rápido
         '-hls_list_size', '10',
-        '-hls_flags', 'delete_segments+append_list',
+        '-hls_flags', 'delete_segments+append_list+omit_endlist',
         '-hls_segment_filename', os.path.join(stream_dir, 'segment_%03d.ts'),
         playlist_path
     ]
     
-    logger.info(f"Starting FFmpeg for stream {stream_id}: {source_url}")
+    logger.info(f"Starting FFmpeg for stream {stream_id}")
+    logger.info(f"Source URL: {source_url}")
+    logger.info(f"Command: {' '.join(cmd)}")
+    
+    # Abrir archivo de log para errores
+    error_log = open(error_log_path, 'w')
     
     # Iniciar FFmpeg en background
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=error_log,
         stdin=subprocess.DEVNULL
     )
     
@@ -433,10 +437,50 @@ def start_ffmpeg_stream(stream_id, source_url):
             'process': process,
             'last_access': time.time(),
             'url': source_url,
-            'dir': stream_dir
+            'dir': stream_dir,
+            'error_log': error_log_path
         }
     
     return playlist_path
+
+def get_ffmpeg_error(stream_id):
+    """Obtiene el error de FFmpeg si existe"""
+    with streams_lock:
+        if stream_id in active_streams:
+            error_log_path = active_streams[stream_id].get('error_log')
+            if error_log_path and os.path.exists(error_log_path):
+                try:
+                    with open(error_log_path, 'r') as f:
+                        return f.read()[-2000:]  # Últimos 2000 caracteres
+                except:
+                    pass
+    return None
+
+def check_ffmpeg_status(stream_id):
+    """Verifica el estado de FFmpeg y retorna información de diagnóstico"""
+    with streams_lock:
+        if stream_id not in active_streams:
+            return {'status': 'not_found', 'error': 'Stream no encontrado'}
+        
+        stream_info = active_streams[stream_id]
+        process = stream_info.get('process')
+        
+        if process is None:
+            return {'status': 'no_process', 'error': 'No hay proceso FFmpeg'}
+        
+        poll_result = process.poll()
+        
+        if poll_result is None:
+            # Proceso aún corriendo
+            return {'status': 'running', 'pid': process.pid}
+        else:
+            # Proceso terminó
+            error = get_ffmpeg_error(stream_id)
+            return {
+                'status': 'exited',
+                'exit_code': poll_result,
+                'error': error
+            }
 
 def wait_for_playlist(playlist_path, timeout=30):
     """Espera hasta que el playlist HLS esté disponible"""
@@ -490,8 +534,17 @@ def hls_playlist(channel_id):
                 start_ffmpeg_stream(stream_id, source_url)
         
         # Esperar a que el playlist esté disponible
-        if not wait_for_playlist(playlist_path, timeout=15):
-            return jsonify({'error': 'Timeout esperando inicio de transcoding'}), 504
+        if not wait_for_playlist(playlist_path, timeout=20):
+            # Verificar qué pasó con FFmpeg
+            ffmpeg_status = check_ffmpeg_status(stream_id)
+            error_msg = f"Timeout esperando transcoding. FFmpeg status: {ffmpeg_status.get('status')}"
+            if ffmpeg_status.get('error'):
+                error_msg += f"\nFFmpeg error: {ffmpeg_status.get('error')[:500]}"
+            logger.error(error_msg)
+            return jsonify({
+                'error': 'Timeout esperando inicio de transcoding',
+                'ffmpeg_status': ffmpeg_status
+            }), 504
         
         # Leer y modificar el playlist para usar rutas relativas correctas
         try:
@@ -629,6 +682,46 @@ def stop_channel_stream(channel_id):
         return jsonify({'success': True, 'message': 'Stream detenido'})
     except Exception as e:
         logger.error(f"Error stopping stream: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/stream/<int:channel_id>/debug')
+def debug_stream(channel_id):
+    """Endpoint de diagnóstico para un stream específico"""
+    try:
+        channel = db.get_channel(channel_id)
+        if not channel:
+            return jsonify({'error': 'Canal no encontrado'}), 404
+        
+        stream_id = get_stream_id(channel_id, channel['url'])
+        stream_dir = os.path.join(HLS_DIR, stream_id)
+        
+        # Información de diagnóstico
+        debug_info = {
+            'channel_id': channel_id,
+            'channel_url': channel['url'],
+            'stream_id': stream_id,
+            'stream_dir': stream_dir,
+            'ffmpeg_path': FFMPEG_PATH,
+            'ffmpeg_exists': os.path.exists(FFMPEG_PATH),
+            'hls_dir_exists': os.path.exists(HLS_DIR),
+            'stream_dir_exists': os.path.exists(stream_dir),
+        }
+        
+        # Archivos en el directorio del stream
+        if os.path.exists(stream_dir):
+            debug_info['files'] = os.listdir(stream_dir)
+        
+        # Estado de FFmpeg
+        debug_info['ffmpeg_status'] = check_ffmpeg_status(stream_id)
+        
+        # Streams activos
+        with streams_lock:
+            debug_info['active_streams'] = list(active_streams.keys())
+        
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        logger.error(f"Error in debug: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health')
